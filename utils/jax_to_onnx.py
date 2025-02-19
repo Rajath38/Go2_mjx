@@ -81,7 +81,7 @@ def make_policy_network(
     action_size,
     mean_std,
     hidden_layer_sizes=[256, 256],
-    activation=nn.ReLU(),
+    activation=nn.SiLU(),
     kernel_init="lecun_uniform",
     layer_norm=False,
 ):
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     obs_size = 48
     act_size = 12
 
-    weights_path = "go2_params.pkl"
+    weights_path = "utils/weights/go2_params-N18.pkl"
 
     with open(weights_path, "rb") as f:
         params_loaded = pickle.load(f)
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     th_policy_network.forward(dummy_input)
 
     # Define the output ONNX file path
-    onnx_file_path = "utils/outputs/go22_policy.onnx"
+    onnx_file_path = "utils/outputs/go2_policy-N18.onnx"
 
     # Export the model
     torch.onnx.export(

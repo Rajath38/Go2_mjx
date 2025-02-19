@@ -31,7 +31,7 @@ from mujoco_playground import wrapper
 import os
 os.environ['JAX_TRACEBACK_FILTERING'] = 'off'
 
-env = Joystick()
+env = Joystick(task = "flat_terrain")
 env_cfg = default_config()
 ppo_params = ppo_config(env_cfg)
 print(f"env: {env}")
@@ -60,7 +60,7 @@ def progress(num_steps, metrics):
     plt.errorbar(x_data, y_data, yerr=y_dataerr, color="blue", fmt='-o')
 
     fig = plt.gcf()  # Store the current figure
-    fig.savefig("progress_plot_go2.png")  # Save the figure
+    fig.savefig("progress_plot_go2_N12.png")  # Save the figure
 
 ppo_training_params = dict(ppo_params)
 network_factory = ppo_networks.make_ppo_networks
@@ -91,10 +91,10 @@ print(f"time to train: {times[-1] - times[1]}")
 params_numpy = jax.tree.map(lambda x: np.array(x) if isinstance(x, jnp.ndarray) else x, params)
 
 # Save params to a pickle file
-with open("go2_params-2.pkl", "wb") as f:
+with open("go2_params-N12.pkl", "wb") as f:
     pickle.dump(params_numpy, f)
 
-print("Params successfully saved as params.pkl")
+print("Params successfully saved as go2_params-N12.pkl")
 
 
 
@@ -116,8 +116,8 @@ jit_step = jax.jit(eval_env.step)
 jit_inference_fn = jax.jit(make_inference_fn(params, deterministic=True))
 
 x_vel = 1.0  #@param {type: "number"}
-y_vel = 0.5  #@param {type: "number"}
-yaw_vel = 3.14  #@param {type: "number"}
+y_vel = 0.0  #@param {type: "number"}
+yaw_vel = 0  #@param {type: "number"}
 
 velocity_kick_range = [0.0, 0.0]  # Disable velocity kick.
 kick_duration_range = [0.05, 0.2]
@@ -224,5 +224,5 @@ frames = eval_env.render(
     modify_scene_fns=mod_fns,
 )
 #media.show_video(frames, fps=fps, loop=False)
-media.write_video("Go2_output-2.mp4", frames, fps=fps)
-print(f"Media written to file")
+media.write_video("Go2_output-N12.mp4", frames, fps=fps)
+print(f"Media written to file Go2_output-N12.mp4")

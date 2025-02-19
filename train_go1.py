@@ -51,7 +51,8 @@ from mujoco_playground import wrapper
 env = Joystick()
 env_cfg = default_config()
 ppo_params = ppo_config(env_cfg)
-print(f"env: {env}")
+print(f"env_config: {env_cfg}")
+print(f"ppo_config: {ppo_params}")
 
 x_data, y_data, y_dataerr = [], [], []
 times = [datetime.now()]
@@ -77,7 +78,7 @@ def progress(num_steps, metrics):
     plt.errorbar(x_data, y_data, yerr=y_dataerr, color="blue", fmt='-o')
 
     fig = plt.gcf()  # Store the current figure
-    fig.savefig("progress_plot_1.png")  # Save the figure
+    fig.savefig("go1_progress_plot_N3.png")  # Save the figure
 
 ppo_training_params = dict(ppo_params)
 network_factory = ppo_networks.make_ppo_networks
@@ -108,10 +109,10 @@ print(f"time to train: {times[-1] - times[1]}")
 params_numpy = jax.tree.map(lambda x: np.array(x) if isinstance(x, jnp.ndarray) else x, params)
 
 # Save params to a pickle file
-with open("params.pkl", "wb") as f:
+with open("go1_params-N3.pkl", "wb") as f:
     pickle.dump(params_numpy, f)
 
-print("Params successfully saved as params.pkl")
+print("Params successfully saved as go1_params-N3.pkl")
 
 #####################PART RUN THE SIMULATION and save the video:
 ##################################################################
@@ -134,8 +135,8 @@ jit_reset = jax.jit(eval_env.reset)
 jit_step = jax.jit(eval_env.step)
 jit_inference_fn = jax.jit(make_inference_fn(params, deterministic=True))
 
-x_vel = 0.0  #@param {type: "number"}
-y_vel = 0.0  #@param {type: "number"}
+x_vel = 1.0  #@param {type: "number"}
+y_vel = 0.5  #@param {type: "number"}
 yaw_vel = 3.14  #@param {type: "number"}
 
 velocity_kick_range = [0.0, 0.0]  # Disable velocity kick.
@@ -243,5 +244,5 @@ frames = eval_env.render(
     modify_scene_fns=mod_fns,
 )
 #media.show_video(frames, fps=fps, loop=False)
-media.write_video("output.mp4", frames, fps=fps)
+media.write_video("Go1_output-N3.mp4", frames, fps=fps)
 print(f"Media written to file")

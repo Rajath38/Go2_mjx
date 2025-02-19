@@ -31,8 +31,9 @@ from mujoco_playground._src.locomotion.go1 import go1_constants as consts
 
 def ppo_config(env_config) -> config_dict.ConfigDict:
   return config_dict.create(
-        num_timesteps= 2000,#200_000_000,
+        num_timesteps= 200_000_000,
         num_evals=10,
+        num_resets_per_eval = 1,
         reward_scaling=1.0,
         episode_length=env_config.episode_length,
         normalize_observations=True,
@@ -46,7 +47,7 @@ def ppo_config(env_config) -> config_dict.ConfigDict:
         num_envs=8192,
         batch_size=256,
         max_grad_norm=1.0,
-        num_resets_per_eval = 1,
+        
         network_factory= config_dict.create(
           policy_hidden_layer_sizes=(512, 256, 128),
           value_hidden_layer_sizes=(512, 256, 128),
@@ -138,6 +139,9 @@ class Joystick(go1_base.Go1Env):
   def _post_init(self) -> None:
     self._init_q = jp.array(self._mj_model.keyframe("home").qpos)
     self._default_pose = jp.array(self._mj_model.keyframe("home").qpos[7:])
+
+    print(f"init_q: {self._init_q}")
+    print(f"default_pose: {self._default_pose}")
 
     # Note: First joint is freejoint.
     self._lowers, self._uppers = self.mj_model.jnt_range[1:].T

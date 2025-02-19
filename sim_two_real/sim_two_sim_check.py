@@ -77,18 +77,20 @@ class OnnxController:
     #if self._counter % self._n_substeps == 0:
     obs = self.get_obs(model, data)
     onnx_input = {"state": obs.reshape(1, -1)}
+    
   
     #print(f"Height: {data.qpos[root_adr+2]}")
     onnx_pred = self._policy.run(None, onnx_input)[0][0]
-    print(f"onnx_pred = {onnx_pred}")
+    #print(f"onnx_pred = {onnx_pred}")
     self._last_action = onnx_pred.copy()
-    data.ctrl[:] = onnx_pred * self._action_scale + self._default_angles
+    data.ctrl[:] = onnx_pred*self._action_scale + self._default_angles
+    print(f"ctrl {data.ctrl[:]}")
 
 
 def load_callback(model=None, data=None):
   mujoco.set_mjcb_control(None)
 
-  model = mujoco.MjModel.from_xml_path("go1/xmls/scene_mjx_feetonly_flat_terrain.xml")
+  model = mujoco.MjModel.from_xml_path("go2/xmls/scene_mjx_feetonly_flat_terrain.xml")
   data = mujoco.MjData(model)
 
   mujoco.mj_resetDataKeyframe(model, data, 0)
@@ -99,7 +101,7 @@ def load_callback(model=None, data=None):
   model.opt.timestep = sim_dt
 
   policy = OnnxController(
-      policy_path=("utils/outputs/go22_policy.onnx"),
+      policy_path=("utils/outputs/go2_policy-N9.onnx"),
       default_angles=np.array(model.keyframe("home").qpos[7:]),
       n_substeps=n_substeps,
       action_scale=0.5,
