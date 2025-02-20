@@ -15,9 +15,11 @@ from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowState_ as LowStateGo
 from unitree_sdk2py.utils.crc import CRC
 
 from go2_deploy.common.command_helper import create_damping_cmd, create_zero_cmd, init_cmd_hg, init_cmd_go, MotorMode
-from go2_deploy.common.remote_controller import get_gravity_orientation, transform_imu_data
+from go2_deploy.common.rotation_helper import get_gravity_orientation, transform_imu_data
 from go2_deploy.common.remote_controller import RemoteController, KeyMap
 from go2_deploy.config import Config
+from go2_deploy.common.motion_switcher_client import MotionSwitcherClient
+from unitree_sdk2py.go2.sport.sport_client import SportClient
 
 
 class Controller:
@@ -25,8 +27,7 @@ class Controller:
         self.config = config
         self.remote_controller = RemoteController()
 
-        # Initialize the policy network
-        self.policy = torch.jit.load(config.policy_path)
+        
         # Initializing process variables
         self.qj = np.zeros(config.num_actions, dtype=np.float32)
         self.dqj = np.zeros(config.num_actions, dtype=np.float32)
@@ -36,191 +37,111 @@ class Controller:
         self.cmd = np.array([0.0, 0, 0])
         self.counter = 0
 
-        if config.msg_type == "hg":
-            # g1 and h1_2 use the hg msg type
-            self.low_cmd = unitree_hg_msg_dds__LowCmd_()
-            self.low_state = unitree_hg_msg_dds__LowState_()
-            self.mode_pr_ = MotorMode.PR
-            self.mode_machine_ = 0
+        # go2 uses the go msg type
+        #self.low_cmd = unitree_go_msg_dds__LowCmd_()
+        self.low_state = unitree_go_msg_dds__LowState_()
 
-            self.lowcmd_publisher_ = ChannelPublisher(config.lowcmd_topic, LowCmdHG)
-            self.lowcmd_publisher_.Init()
+        #initialize  a subscriber
+        self.lowstate_subscriber = ChannelSubscriber(config.lowstate_topic, LowStateGo)
+        self.lowstate_subscriber.Init(self.LowStateGoHandler, 10)
 
-            self.lowstate_subscriber = ChannelSubscriber(config.lowstate_topic, LowStateHG)
-            self.lowstate_subscriber.Init(self.LowStateHgHandler, 10)
+        self.sc = SportClient()  
+        self.sc.SetTimeout(5.0)
+        self.sc.Init()
 
-        elif config.msg_type == "go":
-            # h1 uses the go msg type
-            self.low_cmd = unitree_go_msg_dds__LowCmd_()
-            self.low_state = unitree_go_msg_dds__LowState_()
+        self.msc = MotionSwitcherClient()
+        self.msc.SetTimeout(5.0)
+        self.msc.Init()
 
-            self.lowcmd_publisher_ = ChannelPublisher(config.lowcmd_topic, LowCmdGo)
-            self.lowcmd_publisher_.Init()
-
-            self.lowstate_subscriber = ChannelSubscriber(config.lowstate_topic, LowStateGo)
-            self.lowstate_subscriber.Init(self.LowStateGoHandler, 10)
-
-        else:
-            raise ValueError("Invalid msg_type")
-
-        # wait for the subscriber to receive data
+        # wait for the subscriber to receive data indicating that the go2 is connected successfully
         self.wait_for_low_state()
+        self.action = np.zeros(self.config.num_actions)
+        self.last_action = np.zeros(self.config.num_actions)
+        self.last_last_action = np.zeros(self.config.num_actions)
 
-        # Initialize the command msg
-        if config.msg_type == "hg":
-            init_cmd_hg(self.low_cmd, self.mode_machine_, self.mode_pr_)
-        elif config.msg_type == "go":
-            init_cmd_go(self.low_cmd, weak_motor=self.config.weak_motor)
+        status, result = self.msc.CheckMode()
+        
+        while result['name']:
+            print(f"Trying to deactivate the motion control-related service..")
+            self.sc.StandDown()
+            code, _ = self.msc.ReleaseMode()
+            if (code == 0):
+                print("ReleaseMode succeeded.")
+            else:
+                print("ReleaseMode failed. Error code: ")
+            status, result = self.msc.CheckMode()
+            time.sleep(1)
 
-    def LowStateHgHandler(self, msg: LowStateHG):
-        self.low_state = msg
-        self.mode_machine_ = self.low_state.mode_machine
-        self.remote_controller.set(self.low_state.wireless_remote)
+
+        #init_cmd_go(self.low_cmd, weak_motor=self.config.weak_motor)
 
     def LowStateGoHandler(self, msg: LowStateGo):
         self.low_state = msg
         self.remote_controller.set(self.low_state.wireless_remote)
-
-    def send_cmd(self, cmd: Union[LowCmdGo, LowCmdHG]):
-        cmd.crc = CRC().Crc(cmd)
-        self.lowcmd_publisher_.Write(cmd)
 
     def wait_for_low_state(self):
         while self.low_state.tick == 0:
             time.sleep(self.config.control_dt)
         print("Successfully connected to the robot.")
 
-    def zero_torque_state(self):
-        print("Enter zero torque state.")
-        print("Waiting for the start signal...")
-        while self.remote_controller.button[KeyMap.start] != 1:
-            create_zero_cmd(self.low_cmd)
-            self.send_cmd(self.low_cmd)
-            time.sleep(self.config.control_dt)
-
-    def move_to_default_pos(self):
-        print("Moving to default pos.")
-        # move time 2s
-        total_time = 2
-        num_step = int(total_time / self.config.control_dt)
-        
-        dof_idx = self.config.leg_joint2motor_idx + self.config.arm_waist_joint2motor_idx
-        kps = self.config.kps + self.config.arm_waist_kps
-        kds = self.config.kds + self.config.arm_waist_kds
-        default_pos = np.concatenate((self.config.default_angles, self.config.arm_waist_target), axis=0)
-        dof_size = len(dof_idx)
-        
-        # record the current pos
-        init_dof_pos = np.zeros(dof_size, dtype=np.float32)
-        for i in range(dof_size):
-            init_dof_pos[i] = self.low_state.motor_state[dof_idx[i]].q
-        
-        # move to default pos
-        for i in range(num_step):
-            alpha = i / num_step
-            for j in range(dof_size):
-                motor_idx = dof_idx[j]
-                target_pos = default_pos[j]
-                self.low_cmd.motor_cmd[motor_idx].q = init_dof_pos[j] * (1 - alpha) + target_pos * alpha
-                self.low_cmd.motor_cmd[motor_idx].qd = 0
-                self.low_cmd.motor_cmd[motor_idx].kp = kps[j]
-                self.low_cmd.motor_cmd[motor_idx].kd = kds[j]
-                self.low_cmd.motor_cmd[motor_idx].tau = 0
-            self.send_cmd(self.low_cmd)
-            time.sleep(self.config.control_dt)
-
-    def default_pos_state(self):
-        print("Enter default pos state.")
-        print("Waiting for the Button A signal...")
-        while self.remote_controller.button[KeyMap.A] != 1:
-            for i in range(len(self.config.leg_joint2motor_idx)):
-                motor_idx = self.config.leg_joint2motor_idx[i]
-                self.low_cmd.motor_cmd[motor_idx].q = self.config.default_angles[i]
-                self.low_cmd.motor_cmd[motor_idx].qd = 0
-                self.low_cmd.motor_cmd[motor_idx].kp = self.config.kps[i]
-                self.low_cmd.motor_cmd[motor_idx].kd = self.config.kds[i]
-                self.low_cmd.motor_cmd[motor_idx].tau = 0
-            for i in range(len(self.config.arm_waist_joint2motor_idx)):
-                motor_idx = self.config.arm_waist_joint2motor_idx[i]
-                self.low_cmd.motor_cmd[motor_idx].q = self.config.arm_waist_target[i]
-                self.low_cmd.motor_cmd[motor_idx].qd = 0
-                self.low_cmd.motor_cmd[motor_idx].kp = self.config.arm_waist_kps[i]
-                self.low_cmd.motor_cmd[motor_idx].kd = self.config.arm_waist_kds[i]
-                self.low_cmd.motor_cmd[motor_idx].tau = 0
-            self.send_cmd(self.low_cmd)
-            time.sleep(self.config.control_dt)
-
     def run(self):
         self.counter += 1
         # Get the current joint position and velocity
-        for i in range(len(self.config.leg_joint2motor_idx)):
-            self.qj[i] = self.low_state.motor_state[self.config.leg_joint2motor_idx[i]].q
-            self.dqj[i] = self.low_state.motor_state[self.config.leg_joint2motor_idx[i]].dq
+        for i in self.config.leg_joint2motor_idx:
+            self.qj[i] = self.low_state.motor_state[i].q
+            self.dqj[i] = self.low_state.motor_state[i].dq
 
         # imu_state quaternion: w, x, y, z
         quat = self.low_state.imu_state.quaternion
         ang_vel = np.array([self.low_state.imu_state.gyroscope], dtype=np.float32)
 
-        if self.config.imu_type == "torso":
-            # h1 and h1_2 imu is on the torso
-            # imu data needs to be transformed to the pelvis frame
-            waist_yaw = self.low_state.motor_state[self.config.arm_waist_joint2motor_idx[0]].q
-            waist_yaw_omega = self.low_state.motor_state[self.config.arm_waist_joint2motor_idx[0]].dq
-            quat, ang_vel = transform_imu_data(waist_yaw=waist_yaw, waist_yaw_omega=waist_yaw_omega, imu_quat=quat, imu_omega=ang_vel)
+
+        """ noisy_linvel,  #  Typically ang vel is used, since lin velovity is not accurate estimated
+        noisy_gyro,  # 3 
+        noisy_gravity,  # 3
+        noisy_joint_angles - self._default_pose,  # 12
+        noisy_joint_vel,  # 12
+        info["last_act"],  # 12
+        info["command"],  # 3"""
 
         # create observation
-        gravity_orientation = get_gravity_orientation(quat)
-        qj_obs = self.qj.copy()
-        dqj_obs = self.dqj.copy()
-        qj_obs = (qj_obs - self.config.default_angles) * self.config.dof_pos_scale
-        dqj_obs = dqj_obs * self.config.dof_vel_scale
+        gravity_orientation = get_gravity_orientation(quat) # joint velocities
+        qj_obs = self.qj.copy()  # joint positions
+        dqj_obs = self.dqj.copy()  # joint velocities
+
+        qj_obs = (qj_obs - self.config.default_angles) * self.config.dof_pos_scale  #joint offsets
+        dqj_obs = dqj_obs * self.config.dof_vel_scale 
+
         ang_vel = ang_vel * self.config.ang_vel_scale
+
         period = 0.8
         count = self.counter * self.config.control_dt
         phase = count % period / period
         sin_phase = np.sin(2 * np.pi * phase)
         cos_phase = np.cos(2 * np.pi * phase)
 
-        self.cmd[0] = self.remote_controller.ly
-        self.cmd[1] = self.remote_controller.lx * -1
-        self.cmd[2] = self.remote_controller.rx * -1
 
         num_actions = self.config.num_actions
         self.obs[:3] = ang_vel
-        self.obs[3:6] = gravity_orientation
-        self.obs[6:9] = self.cmd * self.config.cmd_scale * self.config.max_cmd
+        self.obs[3:6] = ang_vel
+        self.obs[6:9] = gravity_orientation
         self.obs[9 : 9 + num_actions] = qj_obs
-        self.obs[9 + num_actions : 9 + num_actions * 2] = dqj_obs
-        self.obs[9 + num_actions * 2 : 9 + num_actions * 3] = self.action
-        self.obs[9 + num_actions * 3] = sin_phase
-        self.obs[9 + num_actions * 3 + 1] = cos_phase
+        self.obs[9 + num_actions : 9 + num_actions*2] = dqj_obs
+        self.obs[9 + num_actions*2 : 9 + num_actions*3] = self.action
+        self.obs[9 + num_actions*3: 9 + num_actions*3 + 3] = self.cmd 
 
-        # Get the action from the policy network
+        #print(f"OBS: {self.obs}")
+        #print(f"Remote: {self.remote_controller.lx}")
+      
+
+        """# Get the action from the policy network
         obs_tensor = torch.from_numpy(self.obs).unsqueeze(0)
-        self.action = self.policy(obs_tensor).detach().numpy().squeeze()
+        self.action = 0#self.policy(obs_tensor).detach().numpy().squeeze()
+        self.last_action = self.action
+        self.last_last_action = self.last_action
         
         # transform action to target_dof_pos
-        target_dof_pos = self.config.default_angles + self.action * self.config.action_scale
-
-        # Build low cmd
-        for i in range(len(self.config.leg_joint2motor_idx)):
-            motor_idx = self.config.leg_joint2motor_idx[i]
-            self.low_cmd.motor_cmd[motor_idx].q = target_dof_pos[i]
-            self.low_cmd.motor_cmd[motor_idx].qd = 0
-            self.low_cmd.motor_cmd[motor_idx].kp = self.config.kps[i]
-            self.low_cmd.motor_cmd[motor_idx].kd = self.config.kds[i]
-            self.low_cmd.motor_cmd[motor_idx].tau = 0
-
-        for i in range(len(self.config.arm_waist_joint2motor_idx)):
-            motor_idx = self.config.arm_waist_joint2motor_idx[i]
-            self.low_cmd.motor_cmd[motor_idx].q = self.config.arm_waist_target[i]
-            self.low_cmd.motor_cmd[motor_idx].qd = 0
-            self.low_cmd.motor_cmd[motor_idx].kp = self.config.arm_waist_kps[i]
-            self.low_cmd.motor_cmd[motor_idx].kd = self.config.arm_waist_kds[i]
-            self.low_cmd.motor_cmd[motor_idx].tau = 0
-
-        # send the command
-        self.send_cmd(self.low_cmd)
+        target_dof_pos = self.config.default_angles + self.action * self.config.action_scale"""
 
         time.sleep(self.config.control_dt)
 
@@ -234,7 +155,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Load config
-    config_path = f"{LEGGED_GYM_ROOT_DIR}/deploy/deploy_real/configs/{args.config}"
+    config_path = f"{LEGGED_GYM_ROOT_DIR}/go2_deploy/configs/{args.config}"
+   
     config = Config(config_path)
 
     # Initialize DDS communication
@@ -242,14 +164,14 @@ if __name__ == "__main__":
 
     controller = Controller(config)
 
-    # Enter the zero torque state, press the start key to continue executing
+    """# Enter the zero torque state, press the start key to continue executing
     controller.zero_torque_state()
 
     # Move to the default position
     controller.move_to_default_pos()
 
     # Enter the default position state, press the A key to continue executing
-    controller.default_pos_state()
+    controller.default_pos_state()"""
 
     while True:
         try:
@@ -259,7 +181,7 @@ if __name__ == "__main__":
                 break
         except KeyboardInterrupt:
             break
-    # Enter the damping state
+    """# Enter the damping state
     create_damping_cmd(controller.low_cmd)
-    controller.send_cmd(controller.low_cmd)
+    controller.send_cmd(controller.low_cmd)"""
     print("Exit")
