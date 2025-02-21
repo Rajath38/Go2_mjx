@@ -24,21 +24,21 @@ import mujoco
 from mujoco import mjx
 
 from mujoco_playground._src import mjx_env
-from mujoco_playground._src.locomotion.go1 import go1_constants as consts
+import go2_spot.go2_constants as consts
 
 
 def get_assets() -> Dict[str, bytes]:
   assets = {}
-  mjx_env.update_assets(assets, consts.ROOT_PATH / "xmls", "*.xml")
-  mjx_env.update_assets(assets, consts.ROOT_PATH / "xmls" / "assets")
-  path = mjx_env.MENAGERIE_PATH / "unitree_go1"
+  path = mjx_env.ROOT_PATH / "locomotion" / "spot" / "xmls"
+  mjx_env.update_assets(assets, path, "*.xml")
+  path = mjx_env.MENAGERIE_PATH / "boston_dynamics_spot"
   mjx_env.update_assets(assets, path, "*.xml")
   mjx_env.update_assets(assets, path / "assets")
   return assets
 
 
-class Go2Env(mjx_env.MjxEnv):
-  """Base class for Go1 environments."""
+class SpotEnv(mjx_env.MjxEnv):
+  """Base class for Spot environments."""
 
   def __init__(
       self,
@@ -47,11 +47,10 @@ class Go2Env(mjx_env.MjxEnv):
       config_overrides: Optional[Dict[str, Union[str, int, list[Any]]]] = None,
   ) -> None:
     super().__init__(config, config_overrides)
-
     self._mj_model = mujoco.MjModel.from_xml_string(
         epath.Path(xml_path).read_text(), assets=get_assets()
     )
-    self._mj_model.opt.timestep = self._config.sim_dt
+    self._mj_model.opt.timestep = config.sim_dt
 
     # Modify PD gains.
     self._mj_model.dof_damping[6:] = config.Kd
@@ -59,45 +58,49 @@ class Go2Env(mjx_env.MjxEnv):
     self._mj_model.actuator_biasprm[:, 1] = -config.Kp
 
     # Increase offscreen framebuffer size to render at higher resolutions.
+    # TODO(kevin): Consider moving this somewhere else.
     self._mj_model.vis.global_.offwidth = 3840
     self._mj_model.vis.global_.offheight = 2160
 
     self._mjx_model = mjx.put_model(self._mj_model)
     self._xml_path = xml_path
-    self._imu_site_id = self._mj_model.site("imu").id
 
   # Sensor readings.
 
-  def get_upvector(self, data: mjx.Data) -> jax.Array:
-    return mjx_env.get_sensor_data(self.mj_model, data, consts.UPVECTOR_SENSOR)
-
   def get_gravity(self, data: mjx.Data) -> jax.Array:
-    return data.site_xmat[self._imu_site_id].T @ jp.array([0, 0, -1])
+    """Return the gravity vector in the world frame."""
+    return mjx_env.get_sensor_data(self.mj_model, data, consts.GRAVITY_SENSOR)
 
   def get_global_linvel(self, data: mjx.Data) -> jax.Array:
+    """Return the linear velocity of the robot in the world frame."""
     return mjx_env.get_sensor_data(
         self.mj_model, data, consts.GLOBAL_LINVEL_SENSOR
     )
 
   def get_global_angvel(self, data: mjx.Data) -> jax.Array:
+    """Return the angular velocity of the robot in the world frame."""
     return mjx_env.get_sensor_data(
         self.mj_model, data, consts.GLOBAL_ANGVEL_SENSOR
     )
 
   def get_local_linvel(self, data: mjx.Data) -> jax.Array:
+    """Return the linear velocity of the robot in the local frame."""
     return mjx_env.get_sensor_data(
         self.mj_model, data, consts.LOCAL_LINVEL_SENSOR
     )
 
   def get_accelerometer(self, data: mjx.Data) -> jax.Array:
+    """Return the accelerometer readings in the local frame."""
     return mjx_env.get_sensor_data(
         self.mj_model, data, consts.ACCELEROMETER_SENSOR
     )
 
   def get_gyro(self, data: mjx.Data) -> jax.Array:
+    """Return the gyroscope readings in the local frame."""
     return mjx_env.get_sensor_data(self.mj_model, data, consts.GYRO_SENSOR)
 
   def get_feet_pos(self, data: mjx.Data) -> jax.Array:
+    """Return the position of the feet relative to the trunk."""
     return jp.vstack([
         mjx_env.get_sensor_data(self.mj_model, data, sensor_name)
         for sensor_name in consts.FEET_POS_SENSOR

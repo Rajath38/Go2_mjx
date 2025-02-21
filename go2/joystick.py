@@ -32,7 +32,7 @@ import go2.go2_constants as consts
 
 def ppo_config(env_config) -> config_dict.ConfigDict:
   return config_dict.create(
-        num_timesteps= 1000_000_000,
+        num_timesteps= 600_000_000,
         num_evals=10,
         num_resets_per_eval = 1,
         reward_scaling=2.0,
@@ -94,12 +94,12 @@ def default_config() -> config_dict.ConfigDict:
               termination=-1.0,
               stand_still=-1.0,
               # Regularization.
-              torques=-0.0002,
+              torques=-0.0002,# -0.0002
               action_rate=-0.01,
               energy=-0.001,
               # Feet.
-              feet_clearance=-2.0,
-              feet_height=-0.2,
+              feet_clearance= -2.0, #-2.0,
+              feet_height=-0.2, 
               feet_slip=-0.1,
               feet_air_time=0.1,
           ),
@@ -107,7 +107,7 @@ def default_config() -> config_dict.ConfigDict:
           max_foot_height=0.1,
       ),
       pert_config=config_dict.create(
-          enable=False,
+          enable=True,
           velocity_kick=[0.0, 3.0],
           kick_durations=[0.05, 0.2],
           kick_wait_times=[1.0, 3.0],
@@ -369,12 +369,12 @@ class Joystick(go2_base.Go2Env):
     )
 
     state = jp.hstack([
-        noisy_linvel,  # 3
         noisy_gyro,  # 3
         noisy_gravity,  # 3
         noisy_joint_angles - self._default_pose,  # 12
         noisy_joint_vel,  # 12
         info["last_act"],  # 12
+        info["last_last_act"], #12
         info["command"],  # 3
     ])
 

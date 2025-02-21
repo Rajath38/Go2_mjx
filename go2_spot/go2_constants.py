@@ -51,7 +51,7 @@ FEET_POS_SENSOR = [f"{site}_pos" for site in FEET_SITES]
 
 ROOT_BODY = "trunk"
 
-UPVECTOR_SENSOR = "upvector"
+GRAVITY_SENSOR = "upvector"
 GLOBAL_LINVEL_SENSOR = "global_linvel"
 GLOBAL_ANGVEL_SENSOR = "global_angvel"
 LOCAL_LINVEL_SENSOR = "local_linvel"

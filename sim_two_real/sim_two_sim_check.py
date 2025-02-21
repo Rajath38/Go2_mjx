@@ -47,9 +47,11 @@ class OnnxController:
     self._action_scale = action_scale
     self._default_angles = default_angles
     self._last_action = np.zeros_like(default_angles, dtype=np.float32)
+    self._last_last_action = np.zeros_like(default_angles, dtype=np.float32)
 
     self._counter = 0
     self._n_substeps = n_substeps
+
 
     # Initialize publisher
     self.PJ = pub.publish_cmd()
@@ -62,12 +64,13 @@ class OnnxController:
     joint_angles = data.qpos[7:] - self._default_angles
     joint_velocities = data.qvel[6:]
     obs = np.hstack([
-        linvel,
+        #linvel,
         gyro,
         gravity,
         joint_angles,
         joint_velocities,
         self._last_action,
+        self._last_last_action,
         self.PJ.get()['XYyaw'],
     ])
     return obs.astype(np.float32)
@@ -83,6 +86,7 @@ class OnnxController:
     onnx_pred = self._policy.run(None, onnx_input)[0][0]
     #print(f"onnx_pred = {onnx_pred}")
     self._last_action = onnx_pred.copy()
+    self._last_last_action = self._last_action
     data.ctrl[:] = onnx_pred*self._action_scale + self._default_angles
     print(f"ctrl {data.ctrl[:]}")
 
@@ -101,7 +105,7 @@ def load_callback(model=None, data=None):
   model.opt.timestep = sim_dt
 
   policy = OnnxController(
-      policy_path=("utils/outputs/go2_policy-N9.onnx"),
+      policy_path=("utils/outputs/go2_policy-N23.onnx"),
       default_angles=np.array(model.keyframe("home").qpos[7:]),
       n_substeps=n_substeps,
       action_scale=0.5,

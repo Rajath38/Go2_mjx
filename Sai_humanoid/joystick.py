@@ -145,6 +145,14 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
     ])
     # fmt: on
 
+    """# define nominal pose
+        base_position = [0, 0, 0.42]              #base link position
+        base_orientation = [1, 0, 0, 0]           #bask link orientation
+        nominal_pose = [0, 0.0154, 0.5175, -0.9879, 0.4704,
+                        0, 0.0154, 0.5175, -0.9879, 0.4704,   #                                                          -0.9879
+                             -0.7, 1.3, 2.0,        #right hand position 
+                             0.7, -1.3, -2.0]      #left hand position"""
+
     self._torso_body_id = self._mj_model.body(consts.ROOT_BODY).id
     self._torso_mass = self._mj_model.body_subtreemass[self._torso_body_id]
     self._site_id = self._mj_model.site("imu").id

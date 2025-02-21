@@ -25,8 +25,8 @@ import numpy as np
 from mujoco_playground._src import collision
 from mujoco_playground._src import gait
 from mujoco_playground._src import mjx_env
-import go2.base as go2_base
-import go2.go2_constants as consts
+from go2_spot import base as spot_base
+import go2_spot.go2_constants as consts
 from mujoco.mjx._src import math
 
 
@@ -64,12 +64,11 @@ def default_config() -> config_dict.ConfigDict:
       sim_dt=0.004,
       episode_length=1000,
       Kp=35.0,
-      Kd=0.5,
+      Kd=1.0,
       early_termination=True,
       action_repeat=1,
-      action_scale=0.5,
-      history_len=1,
-      soft_joint_pos_limit_factor=0.95,
+      action_scale=0.3,
+      history_len=3,
       obs_noise=config_dict.create(
           scales=config_dict.create(
               joint_pos=0.05,
@@ -82,7 +81,7 @@ def default_config() -> config_dict.ConfigDict:
           scales=config_dict.create(
               tracking_lin_vel=1.5,
               tracking_ang_vel=0.8,
-              lin_vel_z= -0.5, #-2.0,
+              lin_vel_z=-2.0,
               ang_vel_xy=-0.05,
               orientation=-5.0,
               termination=-1.0,
@@ -96,7 +95,7 @@ def default_config() -> config_dict.ConfigDict:
               feet_air_time=0.1,
           ),
           tracking_sigma=0.25,
-          max_foot_height=0.1,
+          max_foot_height=0.12,
       ),
       pert_config=config_dict.create(
           enable=False,
@@ -112,7 +111,7 @@ def default_config() -> config_dict.ConfigDict:
   )
 
 
-class Joystick(go2_base.Go2Env):
+class Joystick(spot_base.SpotEnv):
   """Track a joystick command."""
 
   def __init__(
@@ -139,9 +138,6 @@ class Joystick(go2_base.Go2Env):
     self._lowers = self._mj_model.actuator_ctrlrange[:, 0]
     self._uppers = self._mj_model.actuator_ctrlrange[:, 1]
 
-    self._soft_lowers = self._lowers * self._config.soft_joint_pos_limit_factor
-    self._soft_uppers = self._uppers * self._config.soft_joint_pos_limit_factor
-
     self._torso_body_id = self._mj_model.body(consts.ROOT_BODY).id
     self._torso_mass = self._mj_model.body_subtreemass[self._torso_body_id]
 
@@ -167,26 +163,11 @@ class Joystick(go2_base.Go2Env):
     self._weights = jp.array([1.0, 1.0, 1.0] * 4)
 
   def reset(self, rng: jax.Array) -> mjx_env.State:
-    qpos = self._init_q
-    qvel = jp.zeros(self.mjx_model.nv)
-
-    # x=+U(-0.5, 0.5), y=+U(-0.5, 0.5), yaw=U(-3.14, 3.14).
-    rng, key = jax.random.split(rng)
-    dxy = jax.random.uniform(key, (2,), minval=-0.5, maxval=0.5)
-    qpos = qpos.at[0:2].set(qpos[0:2] + dxy)
-    rng, key = jax.random.split(rng)
-    yaw = jax.random.uniform(key, (1,), minval=-3.14, maxval=3.14)
-    quat = math.axis_angle_to_quat(jp.array([0, 0, 1]), yaw)
-    new_quat = math.quat_mul(qpos[3:7], quat)
-    qpos = qpos.at[3:7].set(new_quat)
-
-    # d(xyzrpy)=U(-0.5, 0.5)
-    rng, key = jax.random.split(rng)
-    qvel = qvel.at[0:6].set(
-        jax.random.uniform(key, (6,), minval=-0.5, maxval=0.5)
+    data = mjx_env.init(
+        self.mjx_model,
+        qpos=self._init_q,
+        qvel=jp.zeros(self.mjx_model.nv),
     )
-
-    data = mjx_env.init(self.mjx_model, qpos=qpos, qvel=qvel, ctrl=qpos[7:])
 
     rng, key1, key2, key3 = jax.random.split(rng, 4)
     time_until_next_pert = jax.random.uniform(
@@ -211,18 +192,28 @@ class Joystick(go2_base.Go2Env):
         maxval=self._config.pert_config.velocity_kick[1],
     )
 
-    rng, key1, key2 = jax.random.split(rng, 3)
-    time_until_next_cmd = jax.random.exponential(key1) * 5.0
-    steps_until_next_cmd = jp.round(time_until_next_cmd / self.dt).astype(
-        jp.int32
-    )
-  
+    # Sample frequency and gait.
+    # gait_freq = jax.random.uniform(
+    #     rng,
+    #     minval=self._config.gait_frequency[0],
+    #     maxval=self._config.gait_frequency[1],
+    # )
+    # phase_dt = 2 * jp.pi * self.dt * gait_freq
+    # gait = jax.random.randint(
+    #     rng, minval=0, maxval=len(self._config.gaits), shape=()
+    # )
+    # phase = jp.array(_PHASES[gait])
+    # foot_height = jax.random.uniform(
+    #     rng,
+    #     minval=self._config.foot_height[0],
+    #     maxval=self._config.foot_height[1],
+    # )
+
     rng, cmd_rng, noise_rng = jax.random.split(rng, 3)
     info = {
         "rng": rng,
         "step": 0,
         "command": self.sample_command(cmd_rng),
-        "steps_until_next_cmd": steps_until_next_cmd,
         "last_act": jp.zeros(self.mjx_model.nu),
         "last_last_act": jp.zeros(self.mjx_model.nu),
         "motor_targets": jp.zeros(self.mjx_model.nu),
@@ -237,6 +228,11 @@ class Joystick(go2_base.Go2Env):
         "pert_steps": 0,
         "pert_dir": jp.zeros(3),
         "pert_mag": pert_mag,
+        # "gait_freq": gait_freq,
+        # "gait": gait,
+        # "phase": phase,
+        # "phase_dt": phase_dt,
+        # "foot_height": foot_height,
     }
 
     metrics = {}
@@ -254,7 +250,7 @@ class Joystick(go2_base.Go2Env):
     state = self._pert_func(state, pert_rng)
 
     motor_targets = self._default_pose + action * self._config.action_scale
-    motor_targets = jp.clip(motor_targets, self._soft_lowers, self._soft_uppers)
+    motor_targets = jp.clip(motor_targets, self._lowers, self._uppers)
     data = mjx_env.step(
         self.mjx_model, state.data, motor_targets, self.n_substeps
     )
@@ -311,18 +307,13 @@ class Joystick(go2_base.Go2Env):
     state = state.replace(data=data, obs=obs, reward=reward, done=done)
     return state
 
-  """def _get_termination(self, data: mjx.Data) -> jax.Array:
-    fall_termination = self.get_gravity(data)[-1] < 0.0 #was 0.85
+  def _get_termination(self, data: mjx.Data) -> jax.Array:
+    fall_termination = self.get_gravity(data)[-1] < 0.85
     return jp.where(
         self._config.early_termination,
         fall_termination,
         jp.zeros((), dtype=fall_termination.dtype),
-    )"""
-  
-
-  def _get_termination(self, data: mjx.Data) -> jax.Array:
-    fall_termination = self.get_gravity(data)[-1] < 0.0
-    return fall_termination
+    )
 
   def _get_obs(
       self,
