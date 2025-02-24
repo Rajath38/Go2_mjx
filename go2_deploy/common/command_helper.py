@@ -41,7 +41,7 @@ def init_cmd_hg(cmd: LowCmdHG, mode_machine: int, mode_pr: int):
         cmd.motor_cmd[i].tau = 0
 
 
-def init_cmd_go(cmd: LowCmdGo, weak_motor: list):
+def init_cmd_go(cmd: LowCmdGo):
     cmd.head[0] = 0xFE
     cmd.head[1] = 0xEF
     cmd.level_flag = 0xFF
@@ -49,11 +49,9 @@ def init_cmd_go(cmd: LowCmdGo, weak_motor: list):
     PosStopF = 2.146e9
     VelStopF = 16000.0
     size = len(cmd.motor_cmd)
+    print(f"cmd_size:{size}")
     for i in range(size):
-        if i in weak_motor:
-            cmd.motor_cmd[i].mode = 1
-        else:
-            cmd.motor_cmd[i].mode = 0x0A
+        cmd.motor_cmd[i].mode = 0x01
         cmd.motor_cmd[i].q = PosStopF
         cmd.motor_cmd[i].qd = VelStopF
         cmd.motor_cmd[i].kp = 0

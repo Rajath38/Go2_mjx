@@ -33,7 +33,7 @@ from mujoco.mjx._src import math
 
 def ppo_config(env_config) -> config_dict.ConfigDict:
   return config_dict.create(
-        num_timesteps= 1000_000_000,
+        num_timesteps= 400_000_000,
         num_evals=10,
         num_resets_per_eval = 1,
         reward_scaling=2.0,
@@ -50,12 +50,12 @@ def ppo_config(env_config) -> config_dict.ConfigDict:
         batch_size=256,
         max_grad_norm=1.0,
         
-        network_factory= config_dict.create(
-          policy_hidden_layer_sizes=(512, 256, 128),
-          value_hidden_layer_sizes=(512, 256, 128),
+        network_factory=config_dict.create(
+          policy_hidden_layer_sizes=(128, 128, 128, 128),
+          value_hidden_layer_sizes=(256, 256, 256, 256, 256),
           policy_obs_key="state",
-          value_obs_key="privileged_state",
-        ),
+          value_obs_key="state",
+      ),
     )
 
 def default_config() -> config_dict.ConfigDict:
@@ -65,7 +65,7 @@ def default_config() -> config_dict.ConfigDict:
       episode_length=1000,
       Kp=35.0,
       Kd=1.0,
-      early_termination=True,
+      early_termination=False,
       action_repeat=1,
       action_scale=0.3,
       history_len=3,
@@ -81,7 +81,7 @@ def default_config() -> config_dict.ConfigDict:
           scales=config_dict.create(
               tracking_lin_vel=1.5,
               tracking_ang_vel=0.8,
-              lin_vel_z=-2.0,
+              lin_vel_z=-0.5,
               ang_vel_xy=-0.05,
               orientation=-5.0,
               termination=-1.0,
@@ -95,7 +95,7 @@ def default_config() -> config_dict.ConfigDict:
               feet_air_time=0.1,
           ),
           tracking_sigma=0.25,
-          max_foot_height=0.12,
+          max_foot_height=0.1,
       ),
       pert_config=config_dict.create(
           enable=False,
@@ -362,11 +362,7 @@ class Joystick(spot_base.SpotEnv):
     feet_pos = feet_pos.ravel()  # (12,)
     noisy_feet_pos = noisy_feet_pos.ravel()  # (12,)
 
-    qpos_error_history = (
-        jp.roll(info["qpos_error_history"], 12)
-        .at[:12]
-        .set(noisy_joint_angles - info["motor_targets"])
-    )
+    qpos_error_history = (jp.roll(info["qpos_error_history"], 12).at[:12].set(noisy_joint_angles - info["motor_targets"]))
     info["qpos_error_history"] = qpos_error_history
 
     # cos = jp.cos(info["phase"])
@@ -374,13 +370,13 @@ class Joystick(spot_base.SpotEnv):
     # phase = jp.concatenate([cos, sin])
 
     state = jp.hstack([
-        noisy_gyro,
-        noisy_gravity,
-        noisy_joint_angles - self._default_pose,
-        qpos_error_history,
-        noisy_feet_pos,
-        info["last_act"],
-        info["command"],
+        noisy_gyro, #3
+        noisy_gravity, #3
+        noisy_joint_angles - self._default_pose, #12
+        qpos_error_history, #36
+        noisy_feet_pos, #12
+        info["last_act"], #12
+        info["command"], #3
     ])
     privileged_state = jp.hstack([
         state,

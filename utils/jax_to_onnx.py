@@ -100,10 +100,10 @@ def make_policy_network(
 if __name__ == "__main__":
 
 
-    obs_size = 57
+    obs_size = 81
     act_size = 12
 
-    weights_path = "utils/weights/go2_params-N23.pkl"
+    weights_path = "utils/weights/go2_params-S06.pkl"
 
     with open(weights_path, "rb") as f:
         params_loaded = pickle.load(f)
@@ -123,7 +123,7 @@ if __name__ == "__main__":
         observation_size = obs_size,
         action_size = act_size*2,
         mean_std=mean_std,
-        hidden_layer_sizes=[1024, 512, 256, 128])
+        hidden_layer_sizes=[512, 256, 128])
 
     #copy weight to the torch network
 
@@ -140,12 +140,12 @@ if __name__ == "__main__":
                 j = j + 1
         
     batch_size = 1
-    dummy_input = torch.randn(batch_size, 57)  # For a batch of inputs
+    dummy_input = torch.randn(batch_size, 81)  # For a batch of inputs
 
     th_policy_network.forward(dummy_input)
 
     # Define the output ONNX file path
-    onnx_file_path = "utils/outputs/go2_policy-N23.onnx"
+    onnx_file_path = "utils/outputs/go2_policy-S06.onnx"
 
     # Export the model
     torch.onnx.export(

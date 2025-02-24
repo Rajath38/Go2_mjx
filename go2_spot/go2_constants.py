@@ -22,8 +22,8 @@ import os
 # Current directory
 ROOT_PATH = os.getcwd()
 
-FEET_ONLY_FLAT_TERRAIN_XML = os.path.join(ROOT_PATH, "go2", "xmls", "scene_mjx_feetonly_flat_terrain.xml")
-FEET_ONLY_ROUGH_TERRAIN_XML = os.path.join(ROOT_PATH, "go2", "xmls", "scene_mjx_feetonly_rough_terrain.xml")
+FEET_ONLY_FLAT_TERRAIN_XML = os.path.join(ROOT_PATH, "go2_spot", "xmls", "scene_mjx_feetonly_flat_terrain.xml")
+FEET_ONLY_ROUGH_TERRAIN_XML = os.path.join(ROOT_PATH, "go2_spot", "xmls", "scene_mjx_feetonly_rough_terrain.xml")
 
 
 def task_to_xml(task_name: str) -> epath.Path:

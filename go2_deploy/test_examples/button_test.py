@@ -93,8 +93,11 @@ class Controller:
             time.sleep(1)
         
         init_cmd_go(self.low_cmd)
-        
 
+    def send_cmd(self, cmd: Union[LowCmdGo, LowCmdHG]):
+        cmd.crc = self.crc.Crc(cmd)
+        self.lowcmd_publisher_.Write(cmd)
+        
     def LowStateGoHandler(self, msg: LowStateGo):
         self.low_state = msg
         self.remote_controller.set(self.low_state.wireless_remote)
@@ -104,17 +107,16 @@ class Controller:
             time.sleep(self.config.control_dt)
         print("Successfully connected to the robot.")
 
-    def send_cmd(self, cmd: Union[LowCmdGo, LowCmdHG]):
-        cmd.crc = self.crc.Crc(cmd)
-        self.lowcmd_publisher_.Write(cmd)
-
     def zero_torque_state(self):
         print("Enter zero torque state.")
         print("Waiting for the 'A' signal...")
         while self.remote_controller.button[KeyMap.A] != 1:
+            print("Entered Zero torque mode")
             create_zero_cmd(self.low_cmd)
             self.send_cmd(self.low_cmd)
             time.sleep(self.config.control_dt)
+        print(f"key stateA: {self.remote_controller.button[KeyMap.A]}")
+        print(f"key stateB: {self.remote_controller.button[KeyMap.B]}")
 
     def move_to_default_pos(self):
         # move time 2s
@@ -132,27 +134,20 @@ class Controller:
         for i in range(dof_size):
             init_dof_pos[i] = self.low_state.motor_state[dof_idx[i]].q
 
-
         print("Press 'B' to DEFAULT ROBOT POSE...")
+        print(f"key state1: {self.remote_controller.button[KeyMap.B]}")
 
         while self.remote_controller.button[KeyMap.B] != 1:
             # move to default pos
+            print(f"key state1: {self.remote_controller.button[KeyMap.B]}")
             for i in range(num_step):
                 print(f"Moving step {i}")
                 alpha = i / num_step
                 for j in range(dof_size): #comment to only move calf_FL
-                    #j = 2
-                    motor_idx = dof_idx[j]
-                    target_pos = default_pos[j]
-                    self.low_cmd.motor_cmd[motor_idx].q = init_dof_pos[j] * (1 - alpha) + target_pos * alpha
-                    self.low_cmd.motor_cmd[motor_idx].qd = 0
-                    self.low_cmd.motor_cmd[motor_idx].kp = kps[j]
-                    self.low_cmd.motor_cmd[motor_idx].kd = kds[j]
-                    self.low_cmd.motor_cmd[motor_idx].tau = 0
-                    self.send_cmd(self.low_cmd)
                     time.sleep(self.config.control_dt)
+                break
         
-        self.hold_default_pos_state()
+        #self.hold_default_pos_state()
 
     def hold_default_pos_state(self):
         for i in range(len(self.config.leg_joint2motor_idx)):
@@ -213,9 +208,9 @@ class Controller:
         self.low_cmd.motor_cmd[2].tau = 0
 
         #print(f"lowcmd: {self.low_cmd.motor_cmd}")
-        #print("---------------------------------------------")  #only issue is lowcmd_does not change from time to time?
-
-        self.send_cmd(self.low_cmd)
+        print("--------------CONTROLLER RUNNING--------------------")  #only issue is lowcmd_does not change from time to time?
+        
+        #self.send_cmd(self.low_cmd)
 
 
 if __name__ == "__main__":
@@ -252,7 +247,3 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             break       
 
-    """ Enter the damping state
-    create_damping_cmd(controller.low_cmd)
-    controller.send_cmd(controller.low_cmd)
-    print("Exit")"""

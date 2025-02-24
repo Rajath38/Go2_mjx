@@ -20,6 +20,7 @@ import mujoco.viewer as viewer
 import numpy as np
 import onnxruntime as rt
 from inter_process_com import publisher as pub
+import go2_spot.go2_constants as consts
 
 
 _HERE = epath.Path(__file__).parent
@@ -34,7 +35,7 @@ class OnnxController:
       policy_path: str,
       default_angles: np.ndarray,
       n_substeps: int,
-      action_scale: float = 0.5,
+      action_scale: float = 0.3,
       vel_scale_x: float = 1.5,
       vel_scale_y: float = 0.8,
       vel_scale_rot: float = 2 * np.pi,
@@ -52,27 +53,48 @@ class OnnxController:
     self._counter = 0
     self._n_substeps = n_substeps
 
+    self.qpos_error_history = np.zeros(3*12)
+    self.motor_targets = np.zeros(12)
+
 
     # Initialize publisher
     self.PJ = pub.publish_cmd()
+
+  def get_feet_pos(self, data) -> np.ndarray:
+    """Return the position of the feet relative to the trunk."""
+    return np.vstack([
+        data.sensor(sensor_name).data
+        for sensor_name in consts.FEET_POS_SENSOR
+    ])
 
   def get_obs(self, model, data) -> np.ndarray:
     linvel = data.sensor("local_linvel").data
     gyro = data.sensor("gyro").data
     imu_xmat = data.site_xmat[model.site("imu").id].reshape(3, 3)
     gravity = imu_xmat.T @ np.array([0, 0, -1])
-    joint_angles = data.qpos[7:] - self._default_angles
+    del_joint_angles = data.qpos[7:] - self._default_angles
     joint_velocities = data.qvel[6:]
+
+    history = np.roll(self.qpos_error_history, 12)
+    history[:12] = data.qpos[7:] - self.motor_targets  # Overwrite first 12 elements
+    self.qpos_error_history = history
+
+    feet_pos = self.get_feet_pos(data).ravel()
+    
+
     obs = np.hstack([
-        #linvel,
-        gyro,
-        gravity,
-        joint_angles,
-        joint_velocities,
-        self._last_action,
-        self._last_last_action,
-        self.PJ.get()['XYyaw'],
+        linvel, #3
+        gyro, #3
+        gravity, #3
+        del_joint_angles, #12
+        #self.qpos_error_history, #36
+        #feet_pos, #12
+        joint_velocities, #12
+        self._last_action, #12
+        #self._last_last_action,
+        self.PJ.get()['XYyaw'], #3
     ])
+    print(f"obs:{obs}")
     return obs.astype(np.float32)
 
   def get_control(self, model: mujoco.MjModel, data: mujoco.MjData) -> None:
@@ -84,17 +106,18 @@ class OnnxController:
   
     #print(f"Height: {data.qpos[root_adr+2]}")
     onnx_pred = self._policy.run(None, onnx_input)[0][0]
-    #print(f"onnx_pred = {onnx_pred}")
+    print(f"onnx_pred = {onnx_pred}")
     self._last_action = onnx_pred.copy()
     self._last_last_action = self._last_action
-    data.ctrl[:] = onnx_pred*self._action_scale + self._default_angles
-    print(f"ctrl {data.ctrl[:]}")
+    self.motor_targets = onnx_pred*self._action_scale + self._default_angles 
+    data.ctrl[:] = self.motor_targets
+    #print(f"ctrl {data.ctrl[:]}")
 
 
 def load_callback(model=None, data=None):
   mujoco.set_mjcb_control(None)
 
-  model = mujoco.MjModel.from_xml_path("go2/xmls/scene_mjx_feetonly_flat_terrain.xml")
+  model = mujoco.MjModel.from_xml_path("go2_spot/xmls/scene_mjx_feetonly_flat_terrain.xml")
   data = mujoco.MjData(model)
 
   mujoco.mj_resetDataKeyframe(model, data, 0)
@@ -103,15 +126,15 @@ def load_callback(model=None, data=None):
   sim_dt = 0.004
   n_substeps = int(round(ctrl_dt / sim_dt))
   model.opt.timestep = sim_dt
-
+  
   policy = OnnxController(
-      policy_path=("utils/outputs/go2_policy-N23.onnx"),
+      policy_path=("utils/outputs/go2_policy-5.onnx"),
       default_angles=np.array(model.keyframe("home").qpos[7:]),
       n_substeps=n_substeps,
-      action_scale=0.5,
+      action_scale=0.3,
       vel_scale_x=1.5,
       vel_scale_y=0.8,
-      vel_scale_rot=2 * np.pi,
+      vel_scale_rot= 2 * np.pi,
   )
 
   mujoco.set_mjcb_control(policy.get_control)
