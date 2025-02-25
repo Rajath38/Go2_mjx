@@ -21,27 +21,21 @@ from go2_deploy.config import Config
 from go2_deploy.common.motion_switcher_client import MotionSwitcherClient
 from unitree_sdk2py.go2.sport.sport_client import SportClient
 from unitree_sdk2py.utils.thread import RecurrentThread
-from inter_process_com.publisher import GetSetObservations 
+from inter_process_com.publisher import GetSetObservations, ThreadStatus
 
 
 class Controller:
     def __init__(self, config: Config) -> None:
         self.config = config
-        self.remote_controller = RemoteController()
-        self.get_set_obs = GetSetObservations()
-
-        
-        # Initializing process variables
         self.qj = np.zeros(config.num_actions, dtype=np.float32)
         self.dqj = np.zeros(config.num_actions, dtype=np.float32)
-        self.action = np.zeros(config.num_actions, dtype=np.float32)
         self.target_dof_pos = config.default_angles.copy()
         self.obs = np.zeros(config.num_obs, dtype=np.float32)
-        self.cmd = np.array([0.0, 0, 0])
-        self.counter = 0
+        self.action = np.zeros(self.config.num_actions)
+        self.last_action = np.zeros(self.config.num_actions)
 
-        # go2 uses the go msg type
-        #self.low_cmd = unitree_go_msg_dds__LowCmd_()
+
+        self.get_set_obs = GetSetObservations()
         self.low_state = unitree_go_msg_dds__LowState_()
 
         #initialize  a subscriber
@@ -58,9 +52,7 @@ class Controller:
 
         # wait for the subscriber to receive data indicating that the go2 is connected successfully
         self.wait_for_low_state()
-        self.action = np.zeros(self.config.num_actions)
-        self.last_action = np.zeros(self.config.num_actions)
-        self.last_last_action = np.zeros(self.config.num_actions)
+        
 
         status, result = self.msc.CheckMode()
         
@@ -80,7 +72,6 @@ class Controller:
 
     def LowStateGoHandler(self, msg: LowStateGo):
         self.low_state = msg
-        self.remote_controller.set(self.low_state.wireless_remote)
 
     def wait_for_low_state(self):
         while self.low_state.tick == 0:
@@ -97,48 +88,8 @@ class Controller:
 
         self.lowCmdWriteThreadPtr.Start()
 
-    def zero_torque_state(self):
-        print("For zero torque state.")
-        print("Enter 'A'...to proceed")
-        while self.remote_controller.button[KeyMap.A] != 1:
-            pass
-
-        print("Zero torque")
-        time.sleep(self.config.control_dt)
-    
-    def move_to_default_pos(self):
-        # move time 2s
-        total_time = 2
-        num_step = int(total_time / self.config.control_dt)
-        
-        dof_idx = self.config.leg_joint2motor_idx
-        kps = self.config.kps 
-        kds = self.config.kds 
-        default_pos = self.config.default_angles
-        dof_size = len(dof_idx)
-        
-        # record the current pos
-        init_dof_pos = np.zeros(dof_size, dtype=np.float32)
-        for i in range(dof_size):
-            init_dof_pos[i] = self.low_state.motor_state[dof_idx[i]].q
-
-        print("Press 'B' to DEFAULT ROBOT POSE...")
-
-        while self.remote_controller.button[KeyMap.B] != 1:
-            pass
-            
-        # move to default pos
-        print(f"Moving to default robot pose")
-
-        for i in range(num_step):
-            print(f"Moving step {i}")
-            alpha = i / num_step
-            for j in range(dof_size): #comment to only move calf_FL
-                time.sleep(self.config.control_dt)
-
-
     def run(self):
-        self.counter += 1
+        
         # Get the current joint position and velocity
         for i in self.config.leg_joint2motor_idx:
             self.qj[i] = self.low_state.motor_state[i].q
@@ -149,14 +100,7 @@ class Controller:
         ang_vel = np.array([self.low_state.imu_state.gyroscope], dtype=np.float32)
 
 
-        """ noisy_linvel,  #  Typically ang vel is used, since lin velovity is not accurate estimated
-        noisy_gyro,  # 3 
-        noisy_gravity,  # 3
-        noisy_joint_angles - self._default_pose,  # 12
-        noisy_joint_vel,  # 12
-        info["last_act"],  # 12
-        info["command"],  # 3"""
-
+        
         # create observation
         gravity_orientation = get_gravity_orientation(quat) # joint velocities
         qj_obs = self.qj.copy()  # joint positions
@@ -173,33 +117,24 @@ class Controller:
         sin_phase = np.sin(2 * np.pi * phase)
         cos_phase = np.cos(2 * np.pi * phase)
 
-
+        """linvel, #3
+        gyro, #3
+        gravity, #3
+        del_joint_angles, #12
+        joint_velocities, #12
+        self._last_action, #12
+        self.PJ.get()['XYyaw'], #3"""
 
         num_actions = self.config.num_actions
-        self.obs[:3] = lin_vel
         self.obs[3:6] = ang_vel
         self.obs[6:9] = gravity_orientation
         self.obs[9 : 9 + num_actions] = qj_obs
         self.obs[9 + num_actions : 9 + num_actions*2] = dqj_obs
-        self.obs[9 + num_actions*2 : 9 + num_actions*3] = self.action
+        self.obs[9 + num_actions*2 : 9 + num_actions*3] = self.last_action
         self.obs[9 + num_actions*3: 9 + num_actions*3 + 3] = self.cmd 
 
-        #print(f"OBS: {self.obs}")
-        print(f"Button A: {self.remote_controller.button[KeyMap.A]}")
-        print(f"Button B: {self.remote_controller.button[KeyMap.B]}")
-        print(f"Button START: {self.remote_controller.button[KeyMap.start]}")
-
-
-        """# Get the action from the policy network
-        obs_tensor = torch.from_numpy(self.obs).unsqueeze(0)
-        self.action = 0#self.policy(obs_tensor).detach().numpy().squeeze()
         self.last_action = self.action
-        self.last_last_action = self.last_action
-        
-        # transform action to target_dof_pos
-        target_dof_pos = self.config.default_angles + self.action * self.config.action_scale"""
 
-        time.sleep(self.config.control_dt)
 
 
 if __name__ == "__main__":

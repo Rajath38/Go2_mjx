@@ -29,13 +29,12 @@ import go2.base as go2_base
 import go2.go2_constants as consts
 
 
-
 def ppo_config(env_config) -> config_dict.ConfigDict:
   return config_dict.create(
-        num_timesteps= 600_000_000,
+        num_timesteps= 200_000_000,
         num_evals=10,
         num_resets_per_eval = 1,
-        reward_scaling=2.0,
+        reward_scaling=1.0,
         episode_length=env_config.episode_length,
         normalize_observations=True,
         action_repeat=1,
@@ -49,12 +48,12 @@ def ppo_config(env_config) -> config_dict.ConfigDict:
         batch_size=256,
         max_grad_norm=1.0,
         
-        network_factory= config_dict.create(
-          policy_hidden_layer_sizes=(512, 256, 128),
-          value_hidden_layer_sizes=(512, 256, 128),
+        network_factory=config_dict.create(
+          policy_hidden_layer_sizes=(256, 256, 256, 256, 256),
+          value_hidden_layer_sizes=(256, 256, 256, 256, 256),
           policy_obs_key="state",
           value_obs_key="privileged_state",
-        ),
+      ),
     )
 
 def default_config() -> config_dict.ConfigDict:
@@ -94,12 +93,12 @@ def default_config() -> config_dict.ConfigDict:
               termination=-1.0,
               stand_still=-1.0,
               # Regularization.
-              torques=-0.0002,# -0.0002
+              torques=-0.0002,
               action_rate=-0.01,
               energy=-0.001,
               # Feet.
-              feet_clearance= -2.0, #-2.0,
-              feet_height=-0.2, 
+              feet_clearance=-2.0,
+              feet_height=-0.2,
               feet_slip=-0.1,
               feet_air_time=0.1,
           ),
@@ -107,7 +106,7 @@ def default_config() -> config_dict.ConfigDict:
           max_foot_height=0.1,
       ),
       pert_config=config_dict.create(
-          enable=True,
+          enable=False,
           velocity_kick=[0.0, 3.0],
           kick_durations=[0.05, 0.2],
           kick_wait_times=[1.0, 3.0],
