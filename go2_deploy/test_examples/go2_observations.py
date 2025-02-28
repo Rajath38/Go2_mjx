@@ -176,7 +176,7 @@ class Controller:
 
 
         num_actions = self.config.num_actions
-        self.obs[:3] = lin_vel
+        self.obs[:3] = ang_vel   #lin_vel is yet to be added soon form est_ data
         self.obs[3:6] = ang_vel
         self.obs[6:9] = gravity_orientation
         self.obs[9 : 9 + num_actions] = qj_obs

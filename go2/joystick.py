@@ -34,11 +34,11 @@ def ppo_config(env_config) -> config_dict.ConfigDict:
         num_timesteps= 200_000_000,
         num_evals=10,
         num_resets_per_eval = 1,
-        reward_scaling=1.0,
+        reward_scaling=50.0, #was 1.0 , then 5, 
         episode_length=env_config.episode_length,
         normalize_observations=True,
         action_repeat=1,
-        unroll_length=40, #was 20
+        unroll_length=20,
         num_minibatches=32,
         num_updates_per_batch=4,
         discounting=0.97,
