@@ -34,15 +34,15 @@ def ppo_config(env_config) -> config_dict.ConfigDict:
         num_timesteps= 200_000_000,
         num_evals=10,
         num_resets_per_eval = 1,
-        reward_scaling=50.0, #was 1.0 , then 5, 
+        reward_scaling=50.0, #was 1.0 , then 100
         episode_length=env_config.episode_length,
         normalize_observations=True,
         action_repeat=1,
-        unroll_length=20,
+        unroll_length=50, #was 20
         num_minibatches=32,
         num_updates_per_batch=4,
         discounting=0.97,
-        learning_rate=3e-4,
+        learning_rate=1e-4, #3e-4,
         entropy_cost=1e-2,
         num_envs=8192,
         batch_size=256,
@@ -368,14 +368,24 @@ class Joystick(go2_base.Go2Env):
     )
 
     state = jp.hstack([
+        noisy_linvel,  # 3
         noisy_gyro,  # 3
+        noisy_gravity,  # 3
+        noisy_joint_angles - self._default_pose,  # 12
+        noisy_joint_vel,  # 12
+        info["last_act"],  # 12
+        info["command"],  # 3
+    ])
+
+    """state = jp.hstack([
+        noisy_linvel,  # 3
         noisy_gravity,  # 3
         noisy_joint_angles - self._default_pose,  # 12
         noisy_joint_vel,  # 12
         info["last_act"],  # 12
         info["last_last_act"], #12
         info["command"],  # 3
-    ])
+    ])"""
 
     accelerometer = self.get_accelerometer(data)
     angvel = self.get_global_angvel(data)
