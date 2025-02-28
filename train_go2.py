@@ -60,7 +60,7 @@ def progress(num_steps, metrics):
     plt.errorbar(x_data, y_data, yerr=y_dataerr, color="blue", fmt='-o')
 
     fig = plt.gcf()  # Store the current figure
-    fig.savefig("progress_plot_go2_Train103.png")  # Save the figure
+    fig.savefig("progress_plot_go2_Train104.png")  # Save the figure
 
 ppo_training_params = dict(ppo_params)
 network_factory = ppo_networks.make_ppo_networks
@@ -91,10 +91,10 @@ print(f"time to train: {times[-1] - times[1]}")
 params_numpy = jax.tree.map(lambda x: np.array(x) if isinstance(x, jnp.ndarray) else x, params)
 
 # Save params to a pickle file
-with open("go2_params-Train103.pkl", "wb") as f:
+with open("go2_params-Train104.pkl", "wb") as f:
     pickle.dump(params_numpy, f)
 
-print("Params successfully saved as go2_params-Train103.pkl")
+print("Params successfully saved as go2_params-Train104.pkl")
 
 
 
@@ -224,5 +224,5 @@ frames = eval_env.render(
     modify_scene_fns=mod_fns,
 )
 #media.show_video(frames, fps=fps, loop=False)
-media.write_video("Go2_output-Train103.mp4", frames, fps=fps)
-print(f"Media written to file Go2_output-Train103.mp4")
+media.write_video("Go2_output-Train104.mp4", frames, fps=fps)
+print(f"Media written to file Go2_output-Train104.mp4")

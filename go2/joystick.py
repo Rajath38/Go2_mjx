@@ -38,7 +38,7 @@ def ppo_config(env_config) -> config_dict.ConfigDict:
         episode_length=env_config.episode_length,
         normalize_observations=True,
         action_repeat=1,
-        unroll_length=20,
+        unroll_length=40, #was 20
         num_minibatches=32,
         num_updates_per_batch=4,
         discounting=0.97,
