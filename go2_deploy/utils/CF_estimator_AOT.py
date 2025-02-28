@@ -16,7 +16,7 @@ dt2_2 = dt2 / 2."""
 
 @cc.export('run', '(f8[:], f8[:], f8[:], f8[:], f8[:], f8[:],'
                                  'f8[:], f8[:], f8[:], f8[:],'
-                                 'f8[:,:], f8[:], f8[:], f8[:], f8, f8[:])')
+                                 'f8[:,:], f8[:], f8[:], f8[:], f8, f8[:], f8)')
 def run(v0_b, a0_b, p_fr_b, p_fl_b, p_rr_b, p_rl_b,  
                 v_fr_b, v_fl_b, v_rr_b, v_rl_b,
                 Rm, wm, am, foot_contacts, g, kv, dt):
