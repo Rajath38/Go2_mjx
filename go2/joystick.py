@@ -41,7 +41,7 @@ def ppo_config(env_config) -> config_dict.ConfigDict:
         unroll_length=20, #was 20 //increasing this decreases reward accumulation
         num_minibatches=32,
         num_updates_per_batch=4,
-        discounting=0.99,
+        discounting=0.95, #0.98
         learning_rate=3e-4, #3e-4,
         entropy_cost= 1e-2,
         num_envs=8192,
@@ -83,7 +83,7 @@ def default_config() -> config_dict.ConfigDict:
               tracking_lin_vel=1.5, #was 1
               tracking_ang_vel=0.8, #was 0.5
               # Base reward.
-              lin_vel_z= -2, #was -0.5,
+              lin_vel_z= -0.5,
               ang_vel_xy=-0.05,
               orientation=-5.0,
               # Other.
@@ -93,14 +93,14 @@ def default_config() -> config_dict.ConfigDict:
               termination=-1.0,
               stand_still=-1.0,
               # Regularization.
-              torques=-0.0002,
+              torques=-0.0001, #-0.0002,
               action_rate=-0.01,
-              energy=-0.001,
+              energy= -0.001, #-0.0001,
               # Feet.
               feet_clearance=-2.0,
               feet_height=-0.2,
               feet_slip=-0.1,
-              feet_air_time=0.1,
+              feet_air_time=1, #0.1
           ),
           tracking_sigma=0.25,
           max_foot_height=0.12, #was 0.1
