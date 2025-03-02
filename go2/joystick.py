@@ -64,11 +64,11 @@ def default_config() -> config_dict.ConfigDict:
       Kp=35.0,
       Kd=0.5,
       action_repeat=1,
-      action_scale=0.3,#0.5
+      action_scale=0.5,#0.5
       history_len=1,
       soft_joint_pos_limit_factor=0.95,
       noise_config=config_dict.create(
-          level=1.0,  # Set to 0.0 to disable noise.
+          level=0.0,  # Set to 0.0 to disable noise.
           scales=config_dict.create(
               joint_pos=0.03,
               joint_vel=1.5,
@@ -94,16 +94,16 @@ def default_config() -> config_dict.ConfigDict:
               stand_still=-1.0,
               # Regularization.
               torques=-0.0001, #-0.0002,
-              action_rate=-0.01,
-              energy= -0.001, #-0.0001,
+              action_rate=-0.005, #-0.01
+              energy= -0.002, #-0.001,
               # Feet.
               feet_clearance=-2.0,
               feet_height=-0.2,
               feet_slip=-0.1,
-              feet_air_time=1, #0.1
+              feet_air_time=0.1, #1
           ),
           tracking_sigma=0.25,
-          max_foot_height=0.12, #was 0.1
+          max_foot_height=0.1, #was 0.12
       ),
       pert_config=config_dict.create(
           enable=False,
