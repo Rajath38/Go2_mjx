@@ -2,10 +2,9 @@
 from numba.pycc import CC
 import numpy as np
 from numpy import cos, sin
-import go2_deploy.utils.math_function as MF
 
 
-cc = CC('GO2_kinematics')
+cc = CC('Go2_kinematics_CF')
 
 
 @cc.export('legFK', '(f8, f8, f8, f8,'

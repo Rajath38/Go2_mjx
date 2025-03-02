@@ -32,18 +32,18 @@ import go2.go2_constants as consts
 def ppo_config(env_config) -> config_dict.ConfigDict:
   return config_dict.create(
         num_timesteps= 200_000_000,
-        num_evals=10,
+        num_evals=15,  #was 10
         num_resets_per_eval = 1,
-        reward_scaling=50.0, #was 1.0 , then 100
+        reward_scaling=1.0, #was 1.0 , then 100
         episode_length=env_config.episode_length,
         normalize_observations=True,
         action_repeat=1,
-        unroll_length=5, #was 20 //increasing this decreases reward accumulation
+        unroll_length=20, #was 20 //increasing this decreases reward accumulation
         num_minibatches=32,
         num_updates_per_batch=4,
-        discounting=0.97,
-        learning_rate=1e-4, #3e-4,
-        entropy_cost=1e-2,
+        discounting=0.99,
+        learning_rate=3e-4, #3e-4,
+        entropy_cost= 1e-2,
         num_envs=8192,
         batch_size=256,
         max_grad_norm=1.0,
@@ -64,7 +64,7 @@ def default_config() -> config_dict.ConfigDict:
       Kp=35.0,
       Kd=0.5,
       action_repeat=1,
-      action_scale=0.5,
+      action_scale=0.3,#0.5
       history_len=1,
       soft_joint_pos_limit_factor=0.95,
       noise_config=config_dict.create(
@@ -80,8 +80,8 @@ def default_config() -> config_dict.ConfigDict:
       reward_config=config_dict.create(
           scales=config_dict.create(
               # Tracking.
-              tracking_lin_vel=1.0,
-              tracking_ang_vel=0.5,
+              tracking_lin_vel=1.5, #was 1
+              tracking_ang_vel=0.8, #was 0.5
               # Base reward.
               lin_vel_z=-0.5,
               ang_vel_xy=-0.05,
