@@ -32,7 +32,7 @@ import go2.go2_constants as consts
 def ppo_config(env_config) -> config_dict.ConfigDict:
   return config_dict.create(
         num_timesteps= 200_000_000,
-        num_evals=15,  #was 10
+        num_evals=10,  #was 15
         num_resets_per_eval = 1,
         reward_scaling=1.0, #was 1.0 , then 100
         episode_length=env_config.episode_length,
@@ -53,7 +53,7 @@ def ppo_config(env_config) -> config_dict.ConfigDict:
           value_hidden_layer_sizes=(256, 256, 256, 256, 256),
           policy_obs_key="state",
           value_obs_key="privileged_state",
-      ),
+      )
     )
 
 def default_config() -> config_dict.ConfigDict:
@@ -83,7 +83,7 @@ def default_config() -> config_dict.ConfigDict:
               tracking_lin_vel=1.5, #was 1
               tracking_ang_vel=0.8, #was 0.5
               # Base reward.
-              lin_vel_z=-0.5,
+              lin_vel_z= -2, #was -0.5,
               ang_vel_xy=-0.05,
               orientation=-5.0,
               # Other.
@@ -103,7 +103,7 @@ def default_config() -> config_dict.ConfigDict:
               feet_air_time=0.1,
           ),
           tracking_sigma=0.25,
-          max_foot_height=0.1,
+          max_foot_height=0.12, #was 0.1
       ),
       pert_config=config_dict.create(
           enable=False,
