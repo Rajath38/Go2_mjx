@@ -41,7 +41,7 @@ def ppo_config(env_config) -> config_dict.ConfigDict:
         unroll_length=20, #was 20 //increasing this decreases reward accumulation
         num_minibatches=32,
         num_updates_per_batch=4,
-        discounting=0.95, #0.98
+        discounting=0.97, #was 0.95
         learning_rate=3e-4, #3e-4,
         entropy_cost= 1e-2,
         num_envs=8192,
@@ -68,7 +68,7 @@ def default_config() -> config_dict.ConfigDict:
       history_len=1,
       soft_joint_pos_limit_factor=0.95,
       noise_config=config_dict.create(
-          level=0.0,  # Set to 0.0 to disable noise.
+          level=1.0,  # Set to 0.0 to disable noise.
           scales=config_dict.create(
               joint_pos=0.03,
               joint_vel=1.5,
@@ -93,16 +93,16 @@ def default_config() -> config_dict.ConfigDict:
               termination=-1.0,
               stand_still=-1.0,
               # Regularization.
-              torques=-0.0001, #-0.0002,
-              action_rate=-0.001, #-0.005, -0.01
+              torques=-0.0002, #-0.0002,
+              action_rate=-0.01, #-0.005, -0.01
               energy= -0.001, #-0.002, -0.001,
               # Feet.
               feet_clearance=-2.0,
               feet_height=-0.2,
               feet_slip=-0.1,
-              feet_air_time=1, #1
+              feet_air_time=50, #0.5
           ),
-          tracking_sigma=0.12, #0.25,
+          tracking_sigma=0.25, #0.25,
           max_foot_height=0.1, #was 0.12
       ),
       pert_config=config_dict.create(
