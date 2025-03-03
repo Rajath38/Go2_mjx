@@ -100,10 +100,10 @@ def default_config() -> config_dict.ConfigDict:
               feet_clearance=-2.0,
               feet_height=-0.2,
               feet_slip=-0.1,
-              feet_air_time=10, #5, 0.5, 
+              feet_air_time=5, #5, 0.5, 10 was best till now, for 1: it will gallop, 5 works as well, lets see less
           ),
           tracking_sigma=0.25, #0.25,
-          max_foot_height=0.1, #was 0.12, 
+          max_foot_height=0.12, #was 0.12, 0.1 was best till now
       ),
       pert_config=config_dict.create(
           enable=False,
