@@ -41,7 +41,7 @@ def ppo_config(env_config) -> config_dict.ConfigDict:
         unroll_length=20, #was 20 //increasing this decreases reward accumulation
         num_minibatches=32,
         num_updates_per_batch=4,
-        discounting=0.97, #was 0.95
+        discounting=0.99, #was 0.95
         learning_rate=3e-4, #3e-4,
         entropy_cost= 1e-2,
         num_envs=8192,
@@ -100,7 +100,7 @@ def default_config() -> config_dict.ConfigDict:
               feet_clearance=-2.0,
               feet_height=-0.2,
               feet_slip=-0.1,
-              feet_air_time=50, #0.5
+              feet_air_time=10, #5, 0.5
           ),
           tracking_sigma=0.25, #0.25,
           max_foot_height=0.1, #was 0.12
@@ -433,22 +433,23 @@ class Joystick(go2_base.Go2Env):
         ),
         "lin_vel_z": self._cost_lin_vel_z(self.get_global_linvel(data)),
         "ang_vel_xy": self._cost_ang_vel_xy(self.get_global_angvel(data)),
-        "orientation": self._cost_orientation(self.get_upvector(data)),
-        "stand_still": self._cost_stand_still(info["command"], data.qpos[7:]),
+        "orientation": self._cost_orientation(
+            self.get_gravity(data), data.qpos[2]
+        ),
         "termination": self._cost_termination(done),
-        "pose": self._reward_pose(data.qpos[7:]),
         "torques": self._cost_torques(data.actuator_force),
-        "action_rate": self._cost_action_rate(action, info["last_act"], info["last_last_act"]),
+        "action_rate": self._cost_action_rate(action, info),
         "energy": self._cost_energy(data.qvel[6:], data.actuator_force),
-        "feet_slip": self._cost_feet_slip(data, contact, info),
+        "feet_slip": self._cost_feet_slip(data, contact),
         "feet_clearance": self._cost_feet_clearance(data),
         "feet_height": self._cost_feet_height(
-            info["swing_peak"], first_contact, info
+            info["swing_peak"], first_contact, info["command"]
         ),
         "feet_air_time": self._reward_feet_air_time(
             info["feet_air_time"], first_contact, info["command"]
         ),
-        "dof_pos_limits": self._cost_joint_pos_limits(data.qpos[7:]),
+        # "feet_phase": self._cost_feet_phase(data, info["phase"],
+        # info["foot_height"]),
     }
 
   # Tracking rewards.
