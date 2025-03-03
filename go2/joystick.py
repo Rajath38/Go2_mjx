@@ -41,7 +41,7 @@ def ppo_config(env_config) -> config_dict.ConfigDict:
         unroll_length=20, #was 20 //increasing this decreases reward accumulation
         num_minibatches=32,
         num_updates_per_batch=4,
-        discounting=0.97, #was 0.95
+        discounting=0.99, #was 0.95
         learning_rate=3e-4, #3e-4,
         entropy_cost= 1e-2,
         num_envs=8192,
@@ -100,10 +100,10 @@ def default_config() -> config_dict.ConfigDict:
               feet_clearance=-2.0,
               feet_height=-0.2,
               feet_slip=-0.1,
-              feet_air_time=100, #5, 0.5
+              feet_air_time=10, #5, 0.5, 
           ),
           tracking_sigma=0.25, #0.25,
-          max_foot_height=0.1, #was 0.12
+          max_foot_height=0.1, #was 0.12, 
       ),
       pert_config=config_dict.create(
           enable=False,
