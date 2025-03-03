@@ -94,15 +94,15 @@ def default_config() -> config_dict.ConfigDict:
               stand_still=-1.0,
               # Regularization.
               torques=-0.0001, #-0.0002,
-              action_rate=-0.005, #-0.01
-              energy= -0.002, #-0.001,
+              action_rate=-0.001, #-0.005, -0.01
+              energy= -0.001, #-0.002, -0.001,
               # Feet.
               feet_clearance=-2.0,
               feet_height=-0.2,
               feet_slip=-0.1,
-              feet_air_time=0.1, #1
+              feet_air_time=1, #1
           ),
-          tracking_sigma=0.25,
+          tracking_sigma=0.12, #0.25,
           max_foot_height=0.1, #was 0.12
       ),
       pert_config=config_dict.create(
