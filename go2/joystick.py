@@ -93,7 +93,7 @@ def default_config() -> config_dict.ConfigDict:
               termination=-1.0,
               stand_still=-1.0,
               # Regularization.
-              torques=-0.0002, #-0.0002,
+              torques=-0.0004, #-0.0002,
               action_rate=-0.02, #-0.005, -0.01
               energy= -0.002, #-0.002, -0.001,
               # Feet.
