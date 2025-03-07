@@ -368,8 +368,29 @@ class Joystick(go2_base.Go2Env):
         * self._config.noise_config.scales.linvel
     )
 
+    ##########
+    feet_pos = self.get_feet_pos(data)  # (4, 3)
+    rng, noise_rng = jax.random.split(rng)
+    noisy_feet_pos = feet_pos.at[..., 0].add(
+        (2 * jax.random.uniform(noise_rng, shape=feet_pos[..., 0].shape) - 1)
+        * self._config.obs_noise.scales.feet_pos[0]
+    )
+    noisy_feet_pos = noisy_feet_pos.at[..., 1].add(
+        (2 * jax.random.uniform(noise_rng, shape=feet_pos[..., 1].shape) - 1)
+        * self._config.obs_noise.scales.feet_pos[1]
+    )
+    noisy_feet_pos = noisy_feet_pos.at[..., 2].add(
+        (2 * jax.random.uniform(noise_rng, shape=feet_pos[..., 2].shape) - 1)
+        * self._config.obs_noise.scales.feet_pos[2]
+    )
+    feet_pos = feet_pos.ravel()  # (12,)
+    noisy_feet_pos = noisy_feet_pos.ravel()  # (12,)
+
+    #############
+
     state = jp.hstack([
-        noisy_linvel,  # 3
+        #noisy_linvel,  # 3
+        noisy_feet_pos, # 12
         noisy_gyro,  # 3
         noisy_gravity,  # 3
         noisy_joint_angles - self._default_pose,  # 12
