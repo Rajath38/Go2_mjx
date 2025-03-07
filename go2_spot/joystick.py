@@ -36,14 +36,14 @@ def ppo_config(env_config) -> config_dict.ConfigDict:
         num_timesteps= 400_000_000,
         num_evals=10,
         num_resets_per_eval = 1,
-        reward_scaling=2.0,
+        reward_scaling=1.0, #2.0
         episode_length=env_config.episode_length,
         normalize_observations=True,
         action_repeat=1,
         unroll_length=20,
         num_minibatches=32,
         num_updates_per_batch=4,
-        discounting=0.97,
+        discounting=0.99, #0.97
         learning_rate=3e-4,
         entropy_cost=1e-2,
         num_envs=8192,
@@ -51,11 +51,11 @@ def ppo_config(env_config) -> config_dict.ConfigDict:
         max_grad_norm=1.0,
         
         network_factory=config_dict.create(
-          policy_hidden_layer_sizes=(128, 128, 128, 128),
+          policy_hidden_layer_sizes=(256, 256, 256, 256, 256),
           value_hidden_layer_sizes=(256, 256, 256, 256, 256),
           policy_obs_key="state",
-          value_obs_key="state",
-      ),
+          value_obs_key="privileged_state",
+      )
     )
 
 def default_config() -> config_dict.ConfigDict:
@@ -64,11 +64,11 @@ def default_config() -> config_dict.ConfigDict:
       sim_dt=0.004,
       episode_length=1000,
       Kp=35.0,
-      Kd=1.0,
+      Kd=0.5,
       early_termination=False,
       action_repeat=1,
       action_scale=0.3,
-      history_len=3,
+      history_len=1, #3
       obs_noise=config_dict.create(
           scales=config_dict.create(
               joint_pos=0.05,
@@ -92,7 +92,7 @@ def default_config() -> config_dict.ConfigDict:
               feet_slip=-0.1,
               feet_clearance=-2.0,
               feet_height=-0.1,
-              feet_air_time=0.1,
+              feet_air_time=10, #was default 0.1, 0.5
           ),
           tracking_sigma=0.25,
           max_foot_height=0.1,
@@ -369,14 +369,20 @@ class Joystick(spot_base.SpotEnv):
     # sin = jp.sin(info["phase"])
     # phase = jp.concatenate([cos, sin])
 
+    joint_vel = data.qvel[6:]
+    noisy_joint_vel = joint_vel.at[..., 2].add(
+        (2 * jax.random.uniform(noise_rng, shape=feet_pos[..., 2].shape) - 1)
+        * self._config.obs_noise.scales.feet_pos[2]
+    )
+
     state = jp.hstack([
         noisy_gyro, #3
-        noisy_gravity, #3
-        noisy_joint_angles - self._default_pose, #12
-        qpos_error_history, #36
-        noisy_feet_pos, #12
-        info["last_act"], #12
-        info["command"], #3
+        noisy_gravity,  # 3
+        noisy_joint_angles - self._default_pose,  # 12
+        noisy_joint_vel,  # 12
+        qpos_error_history, # 12
+        info["last_act"],  # 12
+        info["command"],  # 3
     ])
     privileged_state = jp.hstack([
         state,

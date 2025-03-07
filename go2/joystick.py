@@ -31,7 +31,7 @@ import go2.go2_constants as consts
 
 def ppo_config(env_config) -> config_dict.ConfigDict:
   return config_dict.create(
-        num_timesteps= 200_000_000,
+        num_timesteps= 500_000_000,
         num_evals=10,  #was 15
         num_resets_per_eval = 1,
         reward_scaling=1.0, #was 1.0 , then 100
@@ -93,17 +93,18 @@ def default_config() -> config_dict.ConfigDict:
               termination=-1.0,
               stand_still=-1.0,
               # Regularization.
-              torques=-0.0004, #-0.0002,
-              action_rate=-0.02, #-0.005, -0.01
-              energy= -0.002, #-0.002, -0.001,
+              # Regularization.
+              torques=-0.0002, #-0.0002,
+              action_rate=-0.01, #-0.005, -0.01
+              energy= -0.001, #-0.002, -0.001,
               # Feet.
               feet_clearance=-2.0,
-              feet_height=-0.2,
+              feet_height=-0.2, #-0.2
               feet_slip=-0.1,
               feet_air_time=10, #5, 0.5, 10 was best till now,
           ),
           tracking_sigma=0.25, #0.25,
-          max_foot_height=0.05, #was 0.12, 0.1 was best till now, tryinh 0.05
+          max_foot_height=0.1, #was 0.12, 0.1 was best till now,  0.05 not good, 
       ),
       pert_config=config_dict.create(
           enable=False,
