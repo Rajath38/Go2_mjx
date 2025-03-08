@@ -65,7 +65,7 @@ def default_config() -> config_dict.ConfigDict:
       Kd=0.5,
       action_repeat=1,
       action_scale=0.5,#0.5
-      history_len=1,
+      history_len=3, #1
       soft_joint_pos_limit_factor=0.95,
       noise_config=config_dict.create(
           level=1.0,  # Set to 0.0 to disable noise.
@@ -116,7 +116,7 @@ def default_config() -> config_dict.ConfigDict:
           # Uniform distribution for command amplitude.
           a=[1.5, 0.8, 1.2],
           # Probability of not zeroing out new command.
-          b=[0.9, 0.25, 0.5],
+          b=[0.9, 0.85, 0.85], 
       ),
   )
 
@@ -228,6 +228,7 @@ class Joystick(go2_base.Go2Env):
         "rng": rng,
         "command": cmd,
         "steps_until_next_cmd": steps_until_next_cmd,
+        "qpos_error_history": jp.zeros(self._config.history_len * 12),
         "last_act": jp.zeros(self.mjx_model.nu),
         "last_last_act": jp.zeros(self.mjx_model.nu),
         "feet_air_time": jp.zeros(4),
@@ -370,21 +371,28 @@ class Joystick(go2_base.Go2Env):
 
     ##########
     feet_pos = self.get_feet_pos(data)  # (4, 3)
-    rng, noise_rng = jax.random.split(rng)
+    rng, noise_rng = jax.random.split(info["rng"])
     noisy_feet_pos = feet_pos.at[..., 0].add(
         (2 * jax.random.uniform(noise_rng, shape=feet_pos[..., 0].shape) - 1)
-        * self._config.obs_noise.scales.feet_pos[0]
+        * self._config.noise_config.level
+        * self._config.noise_config.scales.linvel
     )
     noisy_feet_pos = noisy_feet_pos.at[..., 1].add(
         (2 * jax.random.uniform(noise_rng, shape=feet_pos[..., 1].shape) - 1)
-        * self._config.obs_noise.scales.feet_pos[1]
+         * self._config.noise_config.level
+        * self._config.noise_config.scales.linvel
     )
     noisy_feet_pos = noisy_feet_pos.at[..., 2].add(
         (2 * jax.random.uniform(noise_rng, shape=feet_pos[..., 2].shape) - 1)
-        * self._config.obs_noise.scales.feet_pos[2]
+         * self._config.noise_config.level
+        * self._config.noise_config.scales.linvel
     )
     feet_pos = feet_pos.ravel()  # (12,)
     noisy_feet_pos = noisy_feet_pos.ravel()  # (12,)
+
+
+    qpos_error_history = (jp.roll(info["qpos_error_history"], 12).at[:12].set(noisy_joint_angles - info["motor_targets"]))
+    info["qpos_error_history"] = qpos_error_history
 
     #############
 
@@ -395,6 +403,7 @@ class Joystick(go2_base.Go2Env):
         noisy_gravity,  # 3
         noisy_joint_angles - self._default_pose,  # 12
         noisy_joint_vel,  # 12
+        qpos_error_history, # 12 * 3
         info["last_act"],  # 12
         info["command"],  # 3
     ])

@@ -145,6 +145,16 @@ def quat2rotm(Q):
     R  = (q4 * q4 - q @ q) * np.eye(3) + 2.0 * q4 * hat(q) + 2.0 * np.outer(q, q)
     return R
 
+@jit(nopython=True)
+def rotm2quat(R):
+    """
+    Convert rotation matrix to quaternion
+    """
+    q4 = 0.5 * np.sqrt(1 + np.trace(R))
+    q = 0.25 * np.linalg.inv(hat(q4)) @ (R - R.T)
+    Q = np.hstack((q, q4))
+    return Q / np.linalg.norm(Q)
+
 
 @jit(nopython=True)
 def exp_filter(history, present, weight):

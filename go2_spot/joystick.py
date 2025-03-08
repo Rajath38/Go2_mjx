@@ -68,7 +68,7 @@ def default_config() -> config_dict.ConfigDict:
       early_termination=False,
       action_repeat=1,
       action_scale=0.3,
-      history_len=1, #3
+      history_len=3, #3
       obs_noise=config_dict.create(
           scales=config_dict.create(
               joint_pos=0.05,

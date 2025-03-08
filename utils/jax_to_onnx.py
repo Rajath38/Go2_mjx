@@ -103,7 +103,7 @@ if __name__ == "__main__":
     obs_size = 48
     act_size = 12
 
-    weights_path = "go2_params-Train121.pkl"
+    weights_path = "go2_params-Train122.pkl"
 
     with open(weights_path, "rb") as f:
         params_loaded = pickle.load(f)
@@ -140,12 +140,12 @@ if __name__ == "__main__":
                 j = j + 1
         
     batch_size = 1
-    dummy_input = torch.randn(batch_size, 48)  # For a batch of inputs
+    dummy_input = torch.randn(batch_size, 57)  # For a batch of inputs
 
     th_policy_network.forward(dummy_input)
 
     # Define the output ONNX file path
-    onnx_file_path = "utils/outputs/go2_policy-121.onnx"
+    onnx_file_path = "utils/outputs/go2_policy-122.onnx"
 
     # Export the model
     torch.onnx.export(

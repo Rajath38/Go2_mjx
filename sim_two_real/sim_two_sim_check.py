@@ -83,6 +83,7 @@ class OnnxController:
     
 
     obs = np.hstack([
+        #feet_pos, 
         linvel, #3
         gyro, #3
         gravity, #3
