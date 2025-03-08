@@ -103,7 +103,7 @@ if __name__ == "__main__":
     obs_size = 48
     act_size = 12
 
-    weights_path = "go2_params-Train122.pkl"
+    weights_path = "go2_params-Train123.pkl"
 
     with open(weights_path, "rb") as f:
         params_loaded = pickle.load(f)
@@ -140,7 +140,7 @@ if __name__ == "__main__":
                 j = j + 1
         
     batch_size = 1
-    dummy_input = torch.randn(batch_size, 57)  # For a batch of inputs
+    dummy_input = torch.randn(batch_size, 93)  # For a batch of inputs
 
     th_policy_network.forward(dummy_input)
 

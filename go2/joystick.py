@@ -228,6 +228,7 @@ class Joystick(go2_base.Go2Env):
         "rng": rng,
         "command": cmd,
         "steps_until_next_cmd": steps_until_next_cmd,
+        "motor_targets": jp.zeros(self.mjx_model.nu),
         "qpos_error_history": jp.zeros(self._config.history_len * 12),
         "last_act": jp.zeros(self.mjx_model.nu),
         "last_last_act": jp.zeros(self.mjx_model.nu),
@@ -269,6 +270,7 @@ class Joystick(go2_base.Go2Env):
     data = mjx_env.step(
         self.mjx_model, state.data, motor_targets, self.n_substeps
     )
+    state.info["motor_targets"] = motor_targets
 
     contact = jp.array([
         collision.geoms_colliding(data, geom_id, self._floor_geom_id)
@@ -398,7 +400,7 @@ class Joystick(go2_base.Go2Env):
 
     state = jp.hstack([
         #noisy_linvel,  # 3
-        noisy_feet_pos, # 12
+        #noisy_feet_pos, # 12
         noisy_gyro,  # 3
         noisy_gravity,  # 3
         noisy_joint_angles - self._default_pose,  # 12
