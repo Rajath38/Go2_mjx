@@ -83,7 +83,7 @@ class OnnxController:
     
 
     obs = np.hstack([
-        feet_pos, 
+        #feet_pos, 
         #linvel, #3
         gyro, #3
         gravity, #3
@@ -129,7 +129,7 @@ def load_callback(model=None, data=None):
   model.opt.timestep = sim_dt
   
   policy = OnnxController(
-      policy_path=("utils/outputs/go2_policy-122.onnx"),
+      policy_path=("utils/outputs/go2_policy-125.onnx"),
       default_angles=np.array(model.keyframe("home").qpos[7:]),
       n_substeps=n_substeps,
       action_scale=0.3,

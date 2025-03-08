@@ -94,14 +94,14 @@ def default_config() -> config_dict.ConfigDict:
               stand_still=-1.0,
               # Regularization.
               # Regularization.
-              torques=-0.0002, #-0.0002,
-              action_rate=-0.01, #-0.005, -0.01
-              energy= -0.001, #-0.002, -0.001,
+              torques=-0.0004, #-0.0002,
+              action_rate=-0.02, #-0.005, -0.01
+              energy= -0.002, #-0.002, -0.001,
               # Feet.
               feet_clearance=-2.0,
               feet_height=-0.2, #-0.2
               feet_slip=-0.1,
-              feet_air_time=10, #5, 0.5, 10 was best till now,
+              feet_air_time=7, #5, 0.5, 10 was best till now,
           ),
           tracking_sigma=0.25, #0.25,
           max_foot_height=0.1, #was 0.12, 0.1 was best till now,  0.05 not good, 
@@ -334,7 +334,7 @@ class Joystick(go2_base.Go2Env):
         * self._config.noise_config.level
         * self._config.noise_config.scales.gyro
     )
-
+    
     gravity = self.get_gravity(data)
     info["rng"], noise_rng = jax.random.split(info["rng"])
     noisy_gravity = (
@@ -400,7 +400,7 @@ class Joystick(go2_base.Go2Env):
 
     state = jp.hstack([
         #noisy_linvel,  # 3
-        #noisy_feet_pos, # 12
+        #noisy_feet_pos, # 12 # if we remove this legs dont touch properly with floor
         noisy_gyro,  # 3
         noisy_gravity,  # 3
         noisy_joint_angles - self._default_pose,  # 12
