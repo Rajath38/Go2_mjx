@@ -11,14 +11,15 @@ class GO2STATE():
         self.LEG_STATE = shmx.SHMEMSEG(robot_name='GO2', seg_name='STATE', init=False)
         self.LEG_STATE.add_block(name='joint_positions',  data=np.zeros(12))
         self.LEG_STATE.add_block(name='joint_velocities', data=np.zeros(12))
-        self.LEG_STATE.add_block(name='imu_acc', data=np.zeros(3))
+        self.LEG_STATE.add_block(name='imu_ori', data=np.zeros(4))
         self.LEG_STATE.add_block(name='imu_omega', data=np.zeros(3))
 
-        self.FOOT_STATE = shmx.SHMEMSEG(robot_name='GO3', seg_name='FOOT_STATE', init=False)
+        self.FOOT_STATE = shmx.SHMEMSEG(robot_name='GO2', seg_name='FOOT_STATE', init=False)
         self.FOOT_STATE.add_block(name='foot_contact', data=np.zeros(4))
+        self.FOOT_STATE.add_block(name='foot_position', data=np.zeros(12))
 
         # Simulator State
-        self.SIMULATOR_STATE = shmx.SHMEMSEG(robot_name='GO4', seg_name='SIMULATOR_STATE', init=False)
+        self.SIMULATOR_STATE = shmx.SHMEMSEG(robot_name='GO2', seg_name='SIMULATOR_STATE', init=False)
         self.SIMULATOR_STATE.add_block(name='time_stamp', data=np.zeros(1))
 
         try:
@@ -48,12 +49,13 @@ class GO2STATE():
     def get(self):
         return self.LEG_STATE.get()
     
-    def set_foot(self, data):
-        data_ = {'foot_contact': data}
+    def set_foot(self, data, data_type):
+        data_ = {data_type: data}
         self.FOOT_STATE.set(data_)
 
-    def get_foot(self):
-        return self.FOOT_STATE.get()
+    def get_foot(self, data_type):
+        data = self.FOOT_STATE.get()
+        return data[data_type]
     
     def set_time(self, data):
         data_ = {'time_stamp': data}

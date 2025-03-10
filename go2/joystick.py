@@ -31,7 +31,7 @@ import go2.go2_constants as consts
 
 def ppo_config(env_config) -> config_dict.ConfigDict:
   return config_dict.create(
-        num_timesteps= 500_000_000,
+        num_timesteps= 600_000_000,
         num_evals=15,  #was 15
         num_resets_per_eval = 1,
         reward_scaling=10.0, #was 1.0 , then 100
@@ -49,8 +49,8 @@ def ppo_config(env_config) -> config_dict.ConfigDict:
         max_grad_norm=1.0,
         
         network_factory= config_dict.create(
-          policy_hidden_layer_sizes=(512, 256, 128),
-          value_hidden_layer_sizes=(512, 256, 128),
+          policy_hidden_layer_sizes=(512, 256, 256, 128),
+          value_hidden_layer_sizes=(512, 256, 256, 256, 128),
           policy_obs_key="state",
           value_obs_key="privileged_state",
         ),
@@ -101,7 +101,7 @@ def default_config() -> config_dict.ConfigDict:
               feet_clearance=-2.0,
               feet_height=-0.2, #-0.2
               feet_slip=-0.1,
-              feet_air_time=1, #5, 0.5, 10 was best till now,
+              feet_air_time=5, #5, 0.5, 10 was best till now,
           ),
           tracking_sigma=0.25, #0.25,
           max_foot_height=0.1, #was 0.12, 0.1 was best till now,  0.05 not good, 
