@@ -1,4 +1,6 @@
 import struct
+from go2_deploy.utils.publisher import GO2STATE
+import numpy as np
 
 
 class KeyMap:
@@ -27,13 +29,20 @@ class RemoteController:
         self.rx = 0
         self.ry = 0
         self.button = [0] * 16
+        self.state = GO2STATE()
 
     def set(self, data):
         # wireless_remote
         keys = struct.unpack("H", data[2:4])[0]
         for i in range(16):
             self.button[i] = (keys & (1 << i)) >> i
+        
+        self.state.set_remote_data(np.array(self.button),"Digital")
+
+
         self.lx = struct.unpack("f", data[4:8])[0]
         self.rx = struct.unpack("f", data[8:12])[0]
         self.ry = struct.unpack("f", data[12:16])[0]
         self.ly = struct.unpack("f", data[20:24])[0]
+
+        self.state.set_remote_data(np.array(self.lx, self.rx, self.ry, self.ly),"Analog")

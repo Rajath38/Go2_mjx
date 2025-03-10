@@ -17,10 +17,16 @@ class GO2STATE():
         self.FOOT_STATE = shmx.SHMEMSEG(robot_name='GO2', seg_name='FOOT_STATE', init=False)
         self.FOOT_STATE.add_block(name='foot_contact', data=np.zeros(4))
         self.FOOT_STATE.add_block(name='foot_position', data=np.zeros(12))
+        self.FOOT_STATE.add_block(name='gravity', data=np.zeros(3))
 
         # Simulator State
         self.SIMULATOR_STATE = shmx.SHMEMSEG(robot_name='GO2', seg_name='SIMULATOR_STATE', init=False)
         self.SIMULATOR_STATE.add_block(name='time_stamp', data=np.zeros(1))
+
+        # Remote Controller State
+        self.REMOTE_STATE = shmx.SHMEMSEG(robot_name='GO2', seg_name='REMOTE_STATE', init=False)
+        self.REMOTE_STATE.add_block(name='Digital', data=np.zeros(16))
+        self.REMOTE_STATE.add_block(name='Analog', data=np.zeros(4))
 
         try:
             self.LEG_STATE.connect_segment()
@@ -36,9 +42,16 @@ class GO2STATE():
 
             self.SIMULATOR_STATE.initialize = True
             self.SIMULATOR_STATE.connect_segment()
+    
+    def set_remote_data(self, data, data_type):
+        data =  {data_type: np.array(data)}
+        self.REMOTE_STATE.set(data)
 
+    def get_remote_data(self, data_type):
+        data = self.REMOTE_STATE.get()
+        return data[data_type]
+    
     def set_data(self, data, data_type):
-
         data =  {data_type: np.array(data)}
         self.LEG_STATE.set(data)
 

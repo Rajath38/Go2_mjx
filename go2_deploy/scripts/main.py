@@ -5,7 +5,10 @@ from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 from go2_deploy.common.remote_controller import KeyMap
 from go2_deploy.config import Config
 
-from go2_deploy.scripts.sense import Sense
+from go2_deploy.scripts.sense import sense_main
+from go2_deploy.scripts.est import est_main
+import multiprocessing as mp
+import os
 
 
 
@@ -25,25 +28,23 @@ if __name__ == "__main__":
     # Initialize DDS communication
     ChannelFactoryInitialize(0, args.net)
 
+    sensor_process = mp.Process(target=sense_main, args=config, daemon=True)
+    est_process = mp.Process(target=est_main, args=config, daemon=True)
 
-    #----------------------------------Sensor read ---------------------------------- 
-    
-    sensor_read = Sense(config)
-    
-    #start collecting sensor data
-    sensor_read.start()
 
+    # Clear the terminal
+    os.system("clear")
+
+
+    #----------------------------------Sensor Read ---------------------------------- 
+    sensor_process.start()
 
     #----------------------------------Run Estimator -------------------------------
+    est_process.start()
+
+    #---------------------------------Main COntroller----------------------------
 
 
 
-    while True: 
-        try:
-            # Press the select key to exit
-            if sensor_read.remote_controller.button[KeyMap.X] == 1:
-                break
-        except KeyboardInterrupt:
-            break     
    
     print("Exit")

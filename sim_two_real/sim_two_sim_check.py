@@ -53,7 +53,7 @@ class OnnxController:
     self._counter = 0
     self._n_substeps = n_substeps
 
-    self.qpos_error_history = np.zeros(3*12)
+    self.qpos_error_history = np.zeros(2*12)
     self.motor_targets = np.zeros(12)
 
 
@@ -111,7 +111,7 @@ class OnnxController:
     self._last_last_action = self._last_action
     self.motor_targets = onnx_pred*self._action_scale + self._default_angles 
     data.ctrl[:] = self.motor_targets
-    #print(f"ctrl {data.ctrl[:]}")
+      #print(f"ctrl {data.ctrl[:]}")
 
 
 def load_callback(model=None, data=None):
@@ -131,7 +131,7 @@ def load_callback(model=None, data=None):
       policy_path=("utils/outputs/go2_policy-127.onnx"),
       default_angles=np.array(model.keyframe("home").qpos[7:]),
       n_substeps=n_substeps,
-      action_scale=0.3,
+      action_scale=0.4,
       vel_scale_x=1.5,
       vel_scale_y=0.8,
       vel_scale_rot= 2 * np.pi,

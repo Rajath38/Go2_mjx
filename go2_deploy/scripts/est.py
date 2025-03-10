@@ -5,17 +5,11 @@ import go2_deploy.utils.Go2_kinematics_CF as KIN
 import go2_deploy.utils.Go2_orientation_CF as ORI
 from termcolor import colored
 import go2_deploy.utils.math_function as MF
-from unitree_sdk2py.utils.thread import RecurrentThread
 
 
-HARDWARE = False
+#the estimator will only estimate foot positions from joint positions
 
-# System constants
-deltat = 1/1500  # Sampling period in seconds (1 ms)
-gyro_meas_error = np.pi * (0.0 / 180.0)  # Gyroscope measurement error in rad/s (5 deg/s)
-beta = np.sqrt(3.0 / 4.0) * gyro_meas_error  # Compute beta
-
-def main_loop():
+def est_main():
     # BRUCE Setup
     state = pub.GO2STATE()
     
@@ -44,9 +38,6 @@ def main_loop():
 
     Po = np.eye(15) * 1e-2                 # Kalman filter state covariance matrix
 
-    # Shared Memory Data
-    estimation_data = {'body_rot_matrix': np.zeros((3, 3))}
-
     # Start Estimation
     print("====== The State Estimation Thread is running at", loop_freq, "Hz... ======")
 
@@ -63,9 +54,10 @@ def main_loop():
         # get leg joint states
         q  = leg_data['joint_positions']
         dq = leg_data['joint_velocities']
+        quat = leg_data['imu_ori']
 
         # compute leg forward kinematics
-        pfr, vfr, Jfr, pfl, vfl, Jfl,prr, vrr, Jrr, prl, vrl, Jrl = KIN.legFK(q[0], q[1], q[2],  0,
+        pfr, vfr, Jfr, pfl, vfl, Jfl, prr, vrr, Jrr, prl, vrl, Jrl = KIN.legFK(q[0], q[1], q[2],  0,
                                                                               q[3], q[4], q[5],  0,
                                                                               q[6], q[7], q[8],  0,
                                                                               q[9], q[10],q[11], 0,
@@ -74,64 +66,11 @@ def main_loop():
                                                                               dq[6], dq[7],  dq[8], 
                                                                               dq[9], dq[10], dq[11] )
 
-        # state estimation
-      
-        foot_contacts = state.FOOT_STATE.get()['foot_contact']
-        for idx in range(4):
-            foot_contacts_count[idx] = foot_contacts_count[idx] + 1 if foot_contacts[idx] else 0
+        data = np.array([pfr, pfl, prr, prl])
+        gravity = MF.get_gravity_orientation(quat)
 
-        #print(f"IMU: {leg_data['imu_omega'], leg_data['imu_acc']}")
-        
-        # robot mode - balance 0
-    #              walking 1
-
-        """if Bruce.mode == 0:
-            kR = 0.002
-        elif Bruce.mode == 1:
-            kR = 0.001"""
-        
-        kR = 0.005
-
-        sim_dt = 0.005#0.005 #0.00025 #simulation advances by 0.25ms
-        control_dt = 0.02#0.025 #0.005#0.025  #but the update in made every 25ms
-
-        """R_wi, w_ii = ORI.run(R_wi, w_ii,
-                             leg_data['imu_omega'], leg_data['imu_acc'], gravity_accel, kR, sim_dt)"""
-        
-        R_wi, w_ii = ori_run(R_wi, w_ii,
-                             leg_data['imu_omega'], leg_data['imu_acc'], gravity_accel, kR, sim_dt)
-        
-        SEq_1, SEq_2, SEq_3, SEq_4 = filter_update(leg_data['imu_omega'][0], leg_data['imu_omega'][1], leg_data['imu_omega'][2], 
-                              leg_data['imu_acc'][0], leg_data['imu_acc'][1], leg_data['imu_acc'][2], 
-                              SEq_1, SEq_2, SEq_3, SEq_4)
-
-        
-        kp, kv = np.array([0.1, 0.1, 0.1]), np.array([0.8, 0.8, 0.8])
-
-
-        """R_wb, w_bb, v_wb, a_wb, \
-        v_bb, yaw_angle = EST.run(v_wb, a_wb, pfr, pfl, prr, prl,  
-                                               np.expand_dims(vfr, axis=1), vfl, vrr, vrl, 
-                                  R_wi, w_ii, leg_data['imu_acc'], foot_contacts, gravity_accel,
-                                         kv, sim_dt)"""
-
-        #print(f"BEFORE v_wb: {v_wb}")
-        R_wb, w_bb, v_wb, a_wb, \
-        v_bb, yaw_angle = run(v_wb, a_wb, pfr, pfl, prr, prl,  
-                        np.expand_dims(vfr, axis=1),  np.expand_dims(vfl, axis=1),  np.expand_dims(vrr, axis=1),  np.expand_dims(vrl, axis=1),
-                                  R_wi, w_ii, leg_data['imu_acc'], foot_contacts, gravity_accel,
-                                         kv, sim_dt)
-
-
-        
-       
-
-        #print(f"velocity = {v_wb}")
-
-        Q = rotation_matrix_to_quaternion(R_wi)
-        print(f"Base_orientation_old: {Q}")
-        #print(f"Base_orientation_updated: {SEq_1.item(), SEq_2.item(), SEq_3.item(), SEq_4.item()}")
-
+        state.set_foot(data, "foot_positions")
+        state.set_foot(gravity, "gravity")
 
         # check time to ensure that the state estimator stays at a consistent running loop.
         loop_end_time = loop_start_time + loop_duration
@@ -144,7 +83,4 @@ def main_loop():
             while state.get_time()['time_stamp'] < loop_end_time:
                 pass
 
-
-if __name__ == '__main__':
-    main_loop()
        
