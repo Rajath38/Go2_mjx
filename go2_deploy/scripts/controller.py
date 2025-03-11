@@ -9,7 +9,7 @@ from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_ as LowCmdHG
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowCmd_ as LowCmdGo
 from unitree_sdk2py.utils.crc import CRC
 
-from go2_deploy.common.command_helper import create_zero_cmd, init_cmd_go
+from go2_deploy.common.command_helper import create_zero_cmd, init_cmd_go, create_damping_cmd
 from go2_deploy.common.remote_controller import KeyMap
 from go2_deploy.config import Config
 from go2_deploy.utils.publisher import GO2STATE
@@ -151,6 +151,8 @@ class Controller:
         # transform action to target_dof_pos
         target_dof_pos = self.config.default_angles + self.action * self.config.action_scale
 
+        #put safe limits on the targett joint positions
+
         # Build low cmd
         for i in range(len(self.config.leg_joint2motor_idx)):
             motor_idx = self.config.leg_joint2motor_idx[i]
@@ -167,7 +169,11 @@ class Controller:
 
     #define what the robot do when emergency stopped
     def emergency(self):
-        #rapidly move to default pos to avoid fall of robot
+        #unitree implimentation had zero damping not sure if its better ....
+        create_damping_cmd(controller.low_cmd)
+        self.send_cmd(controller.low_cmd)
+        # not sure if damping is better than moving to corunch position, we can check by running experiments.... still pending, hardware not available ....
+          #rapidly move to crounch pos to avoid fall of robot
         self.move_to_pos(self.config.crounch_angles, total_time = 2, ask= False)
         self.zero_torque_state(ask=False)
 
