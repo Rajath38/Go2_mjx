@@ -21,6 +21,11 @@ import numpy as np
 import onnxruntime as rt
 from inter_process_com import publisher as pub
 import go2_spot.go2_constants as consts
+import time
+import os
+
+import curses
+
 
 
 _HERE = epath.Path(__file__).parent
@@ -56,6 +61,13 @@ class OnnxController:
     self.qpos_error_history = np.zeros(2*12)
     self.motor_targets = np.zeros(12)
 
+    self.motor_targets_max = np.ones(12)*-3.14
+    self.motor_targets_min = np.ones(12)*3.14
+
+    self.motor_targets_min_limit = np.array([-0.25436466  0.51899811 -2.11845617 -0.44738526  0.50744464 -2.14778503
+                                           -0.22325524  0.74209658 -2.13979741 -0.34792199  0.68587079 -2.15971877]) * 1.1   # to addd an additional 10% allowance
+    self.motor_targets_max_limit = np.array([ 0.42143986  1.23518472 -1.40191968  0.25058498  1.25762399 -1.40316312
+  0.34779105  1.24745273 -1.40170221  0.25281086  1.22268566 -1.40238042]) * 1.1  # to addd an additional 10% allowance
 
     # Initialize publisher
     self.PJ = pub.publish_cmd()
@@ -94,7 +106,7 @@ class OnnxController:
         #self._last_last_action,
         self.PJ.get()['XYyaw'], #3
     ])
-    print(f"obs:{obs}")
+    #print(f"obs:{obs}")
     return obs.astype(np.float32)
 
   def get_control(self, model: mujoco.MjModel, data: mujoco.MjData) -> None:
@@ -106,13 +118,29 @@ class OnnxController:
   
     #print(f"Height: {data.qpos[root_adr+2]}")
     onnx_pred = self._policy.run(None, onnx_input)[0][0]
-    print(f"onnx_pred = {onnx_pred}")
+    #print(f"onnx_pred = {onnx_pred}")
     self._last_action = onnx_pred.copy()
     self._last_last_action = self._last_action
-    self.motor_targets = onnx_pred*self._action_scale + self._default_angles 
+    self.motor_targets = onnx_pred*self._action_scale + self._default_angles
+
+    # Update min and max for each individual element
+    for i in range(12):
+      self.motor_targets_max[i] = max(self.motor_targets_max[i], self.motor_targets[i])
+      self.motor_targets_min[i] = min(self.motor_targets_min[i], self.motor_targets[i])
+
+    #print(f"motor_targets_min:{self.motor_targets_min}")
+    #print(f"motor_targets_max:{self.motor_targets_max}")
+    
+
+    if self._counter % 10 == 0:  # Print every 100 steps
+        os.system("clear")  # Clears the terminal (Use "cls" for Windows)
+        print(f"Step {self._counter}:")
+        print(f"motor_targets_min: {self.motor_targets_min}")
+        print(f"motor_targets_max: {self.motor_targets_max}")
+
+
     data.ctrl[:] = self.motor_targets
       #print(f"ctrl {data.ctrl[:]}")
-
 
 def load_callback(model=None, data=None):
   mujoco.set_mjcb_control(None)
