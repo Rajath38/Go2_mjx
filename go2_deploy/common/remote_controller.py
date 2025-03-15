@@ -37,7 +37,7 @@ class RemoteController:
         for i in range(16):
             self.button[i] = (keys & (1 << i)) >> i
         
-        self.state.set_remote_data(np.array(self.button),"Digital")
+        self.state.set_remote_data(self.button, "Digital")
 
 
         self.lx = struct.unpack("f", data[4:8])[0]
@@ -45,4 +45,4 @@ class RemoteController:
         self.ry = struct.unpack("f", data[12:16])[0]
         self.ly = struct.unpack("f", data[20:24])[0]
 
-        self.state.set_remote_data(np.array(self.lx, self.rx, self.ry, self.ly),"Analog")
+        self.state.set_remote_data([self.lx, self.rx, self.ry, self.ly],"Analog")

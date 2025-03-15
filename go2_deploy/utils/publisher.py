@@ -32,6 +32,7 @@ class GO2STATE():
             self.LEG_STATE.connect_segment()
             self.FOOT_STATE.connect_segment()
             self.SIMULATOR_STATE.connect_segment()
+            self.REMOTE_STATE.connect_segment()
             
         except posix_ipc.ExistentialError:
             self.LEG_STATE.initialize = True
@@ -40,10 +41,14 @@ class GO2STATE():
             self.FOOT_STATE.initialize = True
             self.FOOT_STATE.connect_segment()
 
-            self.SIMULATOR_STATE.initialize = True
-            self.SIMULATOR_STATE.connect_segment()
+            self.REMOTE_STATE.initialize = True
+            self.REMOTE_STATE.connect_segment()
+
+            self.REMOTE_STATE.initialize = True
+            self.REMOTE_STATE.connect_segment()
     
     def set_remote_data(self, data, data_type):
+        #print(f"DEBUG: self.mem_lock type -> {type(self.REMOTE_STATE.mem_lock)}")
         data =  {data_type: np.array(data)}
         self.REMOTE_STATE.set(data)
 

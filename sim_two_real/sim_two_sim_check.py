@@ -57,6 +57,7 @@ class OnnxController:
 
     self._counter = 0
     self._n_substeps = n_substeps
+    self.limit_allowance = 5 # in % percentage
 
     self.qpos_error_history = np.zeros(2*12)
     self.motor_targets = np.zeros(12)
@@ -64,13 +65,31 @@ class OnnxController:
     self.motor_targets_max = np.ones(12)*-3.14
     self.motor_targets_min = np.ones(12)*3.14
 
-    self.motor_targets_min_limit = np.array([-0.25436466  0.51899811 -2.11845617 -0.44738526  0.50744464 -2.14778503
-                                           -0.22325524  0.74209658 -2.13979741 -0.34792199  0.68587079 -2.15971877]) * 1.1   # to addd an additional 10% allowance
-    self.motor_targets_max_limit = np.array([ 0.42143986  1.23518472 -1.40191968  0.25058498  1.25762399 -1.40316312
-  0.34779105  1.24745273 -1.40170221  0.25281086  1.22268566 -1.40238042]) * 1.1  # to addd an additional 10% allowance
 
+    self.motor_targets_min_limit = np.array([
+                                                -0.25,  0.52, -2.12, -0.45,  0.51, -2.15,  
+                                                -0.22,  0.74, -2.14, -0.35,  0.69, -2.16
+                                            ])
+
+    self.motor_targets_max_limit = np.array([
+                                                0.42,  1.24, -1.40,  0.25,  1.26, -1.40,  
+                                                0.35,  1.25, -1.40,  0.25,  1.22, -1.40
+                                            ])
+    
+    self.motor_targets_max_limit += self.limit_allowance/100 * np.abs(self.motor_targets_max_limit - self.motor_targets_min_limit)
+    self.motor_targets_min_limit -= self.limit_allowance/100 * np.abs(self.motor_targets_max_limit - self.motor_targets_min_limit)
     # Initialize publisher
+
     self.PJ = pub.publish_cmd()
+
+  
+  def clipped_and_fault(self, motor_torque):
+    
+    clipped  = np.clip(motor_torque, self.motor_targets_min_limit, self.motor_targets_max_limit)
+
+    fault = (clipped == self.motor_targets_max_limit)|(clipped == self.motor_targets_min_limit)
+    
+    return clipped, fault
 
   def get_feet_pos(self, data) -> np.ndarray:
     """Return the position of the feet relative to the trunk."""
@@ -124,22 +143,27 @@ class OnnxController:
     self.motor_targets = onnx_pred*self._action_scale + self._default_angles
 
     # Update min and max for each individual element
-    for i in range(12):
+    """for i in range(12):
       self.motor_targets_max[i] = max(self.motor_targets_max[i], self.motor_targets[i])
-      self.motor_targets_min[i] = min(self.motor_targets_min[i], self.motor_targets[i])
-
+      self.motor_targets_min[i] = min(self.motor_targets_min[i], self.motor_targets[i])"""
+    
     #print(f"motor_targets_min:{self.motor_targets_min}")
     #print(f"motor_targets_max:{self.motor_targets_max}")
     
 
+    
+    # Clip the array within min and max limits
+    clipped_array, fault = self.clipped_and_fault(self.motor_targets)
+    data.ctrl[:] = clipped_array
+
     if self._counter % 10 == 0:  # Print every 100 steps
         os.system("clear")  # Clears the terminal (Use "cls" for Windows)
-        print(f"Step {self._counter}:")
-        print(f"motor_targets_min: {self.motor_targets_min}")
-        print(f"motor_targets_max: {self.motor_targets_max}")
-
-
-    data.ctrl[:] = self.motor_targets
+        #print(f"Step {self._counter}:")
+        print(f"motor_targets_min: {np.round(self.motor_targets_min_limit,3)}")
+        print(f"motor_targets_max: {np.round(self.motor_targets_max_limit,3)}")
+        print(f"motor_target: {self.motor_targets}")
+        print(f"clipped_array: {np.round(clipped_array,3)}")
+        print(fault)
       #print(f"ctrl {data.ctrl[:]}")
 
 def load_callback(model=None, data=None):

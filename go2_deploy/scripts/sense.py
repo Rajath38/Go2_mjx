@@ -2,7 +2,6 @@ from go2 import LEGGED_GYM_ROOT_DIR
 import numpy as np
 import time
 
-from unitree_sdk2py.core.channel import ChannelSubscriber
 from unitree_sdk2py.idl.default import unitree_go_msg_dds__LowState_
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowState_ as LowStateGo
 
@@ -10,9 +9,10 @@ from go2_deploy.common.remote_controller import RemoteController
 from go2_deploy.config import Config
 from go2_deploy.common.motion_switcher_client import MotionSwitcherClient
 from unitree_sdk2py.go2.sport.sport_client import SportClient
-from inter_process_com.publisher import GetSetObservations 
 from go2_deploy.utils.publisher import GO2STATE
 from termcolor import colored
+from unitree_sdk2py.core.channel import ChannelPublisher, ChannelFactoryInitialize
+from unitree_sdk2py.core.channel import ChannelSubscriber
 
 
 #this subscribes to the go2 to get the low_states and add to the shared memory.
@@ -22,8 +22,8 @@ class Sense:
     def __init__(self, config: Config) -> None:
         self.config = config
         self.remote_controller = RemoteController()
-        self.get_set_obs = GetSetObservations()
         self.SM = GO2STATE()
+        
 
         # Initializing process variables
         self.qj = np.zeros(config.num_actions, dtype=np.float32)
@@ -34,13 +34,17 @@ class Sense:
         self.cmd = np.array([0.0, 0, 0])
         self.counter = 0
 
-        # go2 uses the go msg type
-        #self.low_cmd = unitree_go_msg_dds__LowCmd_()
-        self.low_state = unitree_go_msg_dds__LowState_()
+        ChannelFactoryInitialize(0, "enp2s0")
 
         #initialize  a subscriber
         self.lowstate_subscriber = ChannelSubscriber(config.lowstate_topic, LowStateGo)
+        print("Initializing subscriber...")
         self.lowstate_subscriber.Init(self.LowStateGoHandler, 10)
+        print("Subscriber initialized.")
+        
+
+        # go2 uses the go msg type
+        self.low_state = unitree_go_msg_dds__LowState_()
 
         self.sc = SportClient()  
         self.sc.SetTimeout(5.0)
@@ -49,12 +53,15 @@ class Sense:
         self.msc = MotionSwitcherClient()
         self.msc.SetTimeout(5.0)
         self.msc.Init()
-
+        
         # wait for the subscriber to receive data indicating that the go2 is connected successfully
         self.wait_for_low_state()
+        print(f"OKOKOKOKOK")
         self.action = np.zeros(self.config.num_actions)
         self.last_action = np.zeros(self.config.num_actions)
         self.last_last_action = np.zeros(self.config.num_actions)
+
+        status, result = self.msc.CheckMode()
         
         while result['name']:
             print(f"Trying to deactivate the motion control-related service..")
@@ -67,10 +74,10 @@ class Sense:
             status, result = self.msc.CheckMode()
             time.sleep(1)
 
-
         #init_cmd_go(self.low_cmd, weak_motor=self.config.weak_motor)
 
     def LowStateGoHandler(self, msg: LowStateGo):
+        print("Received a message in LowStateGoHandler!")  # Debugging
         self.low_state = msg
         self.remote_controller.set(self.low_state.wireless_remote)
 
@@ -151,8 +158,24 @@ def sense_loop(Sense: Sense):
 
 def sense_main(config):
 
+#if __name__ == "__main__":
+
+    print("sense_main_1")
+    
+
+    """ # Load config
+    #config_path = f"{LEGGED_GYM_ROOT_DIR}/go2_deploy/configs/{config}"
+    config_path = "go2_deploy/configs/go2.yaml"
+   
+    config = Config(config_path)
+
+    ChannelFactoryInitialize(0, "enp2s0")
+    lowstate_subscriber = ChannelSubscriber(config.lowstate_topic, LowStateGo)"""
+
     # sensor Setup
     sensor_read = Sense(config)
+
+    print("sense_main_2")
 
     sense_loop(sensor_read)
 
