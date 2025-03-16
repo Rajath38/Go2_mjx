@@ -36,6 +36,8 @@ class RemoteController:
         keys = struct.unpack("H", data[2:4])[0]
         for i in range(16):
             self.button[i] = (keys & (1 << i)) >> i
+
+        #print(f"button: {self.button}")
         
         self.state.set_remote_data(self.button, "Digital")
 
@@ -44,5 +46,7 @@ class RemoteController:
         self.rx = struct.unpack("f", data[8:12])[0]
         self.ry = struct.unpack("f", data[12:16])[0]
         self.ly = struct.unpack("f", data[20:24])[0]
+
+        #print(f"rx: {self.rx}")
 
         self.state.set_remote_data([self.lx, self.rx, self.ry, self.ly],"Analog")

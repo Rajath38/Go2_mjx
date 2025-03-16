@@ -23,7 +23,7 @@ from inter_process_com import publisher as pub
 import go2_spot.go2_constants as consts
 import time
 import os
-
+from go2_deploy.utils.publisher import GO2STATE
 import curses
 
 
@@ -49,6 +49,8 @@ class OnnxController:
     self._policy = rt.InferenceSession(
         policy_path, providers=["CPUExecutionProvider"]
     )
+
+    self.JOYSTICK = True
 
     self._action_scale = action_scale
     self._default_angles = default_angles
@@ -81,6 +83,8 @@ class OnnxController:
     # Initialize publisher
 
     self.PJ = pub.publish_cmd()
+    self.SM = GO2STATE()
+    self.cmd_arr = [0, 0, 0]
 
   
   def clipped_and_fault(self, motor_torque):
@@ -111,6 +115,12 @@ class OnnxController:
     self.qpos_error_history = history
 
     feet_pos = self.get_feet_pos(data).ravel()
+
+    if self.JOYSTICK == True:
+      cmd = self.SM.get_remote_data("Analog")
+      self.cmd_arr = cmd[[3, 0, 1]]*np.array([1, -1, -1])  #Selecting elements in the order: ly -> X, lx -> Y, rx -> YAW
+    else:
+      self.cmd_arr = self.PJ.get()['XYyaw']
     
 
     obs = np.hstack([
@@ -123,7 +133,7 @@ class OnnxController:
         #self.qpos_error_history, #36
         self._last_action, #12
         #self._last_last_action,
-        self.PJ.get()['XYyaw'], #3
+        self.cmd_arr#self.PJ.get()['XYyaw'], #3
     ])
     #print(f"obs:{obs}")
     return obs.astype(np.float32)

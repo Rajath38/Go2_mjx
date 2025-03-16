@@ -12,6 +12,7 @@ from go2_deploy.common.command_helper import create_zero_cmd, init_cmd_go, creat
 from go2_deploy.common.remote_controller import KeyMap
 from go2_deploy.config import Config
 from go2_deploy.utils.publisher import GO2STATE
+from unitree_sdk2py.core.channel import ChannelPublisher, ChannelFactoryInitialize
 
 import onnxruntime as rt
 import argparse
@@ -20,17 +21,20 @@ import argparse
 
 
 class Controller:
-    def __init__(self, config: Config, lowcmd_publisher) -> None:
+    def __init__(self, config: Config) -> None:
         self.config = config
    
-        self.obs = GO2STATE()
+        self.obs = np.zeros(config.num_obs, dtype=np.float32)
+        self.SM = GO2STATE()
 
         # go2 uses the go msg type
         self.low_cmd = unitree_go_msg_dds__LowCmd_()
         self.crc = CRC()
 
+        ChannelFactoryInitialize(0, "enp2s0")
+
         #initialize a Publisher
-        self.lowcmd_publisher_ = lowcmd_publisher
+        self.lowcmd_publisher_ = ChannelPublisher(config.lowcmd_topic, LowCmdGo)
         self.lowcmd_publisher_.Init()
 
         self.action = np.zeros(self.config.num_actions)
@@ -38,12 +42,23 @@ class Controller:
         self.last_last_action = np.zeros(self.config.num_actions)
         #init_cmd_go(self.low_cmd, weak_motor=self.config.weak_motor)
 
-        policy_path=("utils/outputs/go2_policy-127.onnx")
+        policy_path=config.policy_path
 
         self.action_scale=0.4
         self._last_action = np.zeros_like(self.action, dtype=np.float32)
         self.motor_targets = np.zeros(12)
         self._policy = rt.InferenceSession(policy_path, providers=["CPUExecutionProvider"])
+
+        self.motor_targets_min_limit = np.array([
+                                                -0.25,  0.52, -2.12, -0.45,  0.51, -2.15,  
+                                                -0.22,  0.74, -2.14, -0.35,  0.69, -2.16
+                                            ])
+
+        self.motor_targets_max_limit = np.array([
+                                                0.42,  1.24, -1.40,  0.25,  1.26, -1.40,  
+                                                0.35,  1.25, -1.40,  0.25,  1.22, -1.40
+                                            ])
+        init_cmd_go(self.low_cmd)
 
     def send_cmd(self, cmd: Union[LowCmdGo, LowCmdHG]):
         cmd.crc = self.crc.Crc(cmd)
@@ -60,15 +75,15 @@ class Controller:
 
         print("Zero torque")
         create_zero_cmd(self.low_cmd)
-        #self.send_cmd(self.low_cmd)
+        self.send_cmd(self.low_cmd)
 
     def get_remote_digital(self):
-        return self.obs.get_remote_data("Digital")
+        return self.SM.get_remote_data("Digital")
     
     def get_remote_analog(self):
-        return self.obs.get_remote_data("Analog")
+        return self.SM.get_remote_data("Analog")
     
-    def move_to_pos(self, default_pos, total_time = 2, ask = True):
+    def move_to_pos(self, default_pos, total_time = 0.5, ask = True):
         # move time 2s
         num_step = int(total_time / self.config.control_dt)
         
@@ -78,7 +93,7 @@ class Controller:
         
         dof_size = len(dof_idx)
 
-        leg_state = self.obs.get()
+        leg_state = self.SM.get()
         qj_obs = leg_state["joint_positions"]
         
         # record the current pos
@@ -106,8 +121,26 @@ class Controller:
                 self.low_cmd.motor_cmd[motor_idx].kp = kps[j]
                 self.low_cmd.motor_cmd[motor_idx].kd = kds[j]
                 self.low_cmd.motor_cmd[motor_idx].tau = 0
-                #self.send_cmd(self.low_cmd)
+                self.send_cmd(self.low_cmd)
                 time.sleep(self.config.control_dt)
+        
+        if ask == True:
+            self.hold_default_pos_state()
+
+
+    def hold_default_pos_state(self):
+
+        print(f"Press R1 to start RL-Controller, PRESS R2 for any emergenry")
+        while self.get_remote_digital()[KeyMap.R1] != 1: 
+            for i in range(len(self.config.leg_joint2motor_idx)):
+                motor_idx = self.config.leg_joint2motor_idx[i]
+                self.low_cmd.motor_cmd[motor_idx].q = self.config.default_angles[i]
+                self.low_cmd.motor_cmd[motor_idx].qd = 0
+                self.low_cmd.motor_cmd[motor_idx].kp = self.config.kps[i]
+                self.low_cmd.motor_cmd[motor_idx].kd = self.config.kds[i]
+                self.low_cmd.motor_cmd[motor_idx].tau = 0
+            self.send_cmd(self.low_cmd)
+            time.sleep(self.config.control_dt)
 
 
     def run(self):
@@ -122,9 +155,9 @@ class Controller:
 
 
         # create observation
-        gravity_orientation = self.obs.get_foot('gravity')
-        foot_positions = self.obs.get_foot('foot_position')
-        leg_state = self.obs.get()
+        gravity_orientation = self.SM.get_foot('gravity')
+        foot_positions = self.SM.get_foot('foot_position')
+        leg_state = self.SM.get()
 
         qj_obs = leg_state["joint_positions"]
         dqj_obs = leg_state["joint_velocities"]
@@ -147,25 +180,29 @@ class Controller:
         self.obs[18 + num_actions*2 : 18 + num_actions*3] = self._last_action
         self.obs[18 + num_actions*3: 18 + num_actions*3 + 3] = self.cmd_arr 
 
+        print(f"cmd:{self.cmd_arr}")
+
         onnx_input = {"state": self.obs.reshape(1, -1)}
         self.action = self._policy.run(None, onnx_input)[0][0]
         self._last_action = self.action.copy()
         # transform action to target_dof_pos
         target_dof_pos = self.config.default_angles + self.action * self.config.action_scale
-
+        clipped_array, fault = self.clipped_and_fault(self.motor_targets)
         #put safe limits on the targett joint positions
 
         # Build low cmd
         for i in range(len(self.config.leg_joint2motor_idx)):
             motor_idx = self.config.leg_joint2motor_idx[i]
-            self.low_cmd.motor_cmd[motor_idx].q = target_dof_pos[i]
+            self.low_cmd.motor_cmd[motor_idx].q = clipped_array[i]
             self.low_cmd.motor_cmd[motor_idx].qd = 0
             self.low_cmd.motor_cmd[motor_idx].kp = self.config.kps[i]
             self.low_cmd.motor_cmd[motor_idx].kd = self.config.kds[i]
             self.low_cmd.motor_cmd[motor_idx].tau = 0
 
         # send the command
-        #self.send_cmd(self.low_cmd) 
+        #self.send_cmd(self.low_cmd)
+        print(f"target_position:{clipped_array}") 
+        print(f"fault: {fault}")
 
         time.sleep(self.config.control_dt)
 
@@ -176,24 +213,26 @@ class Controller:
         #self.send_cmd(controller.low_cmd)
         # not sure if damping is better than moving to corunch position, we can check by running experiments.... still pending, hardware not available ....
           #rapidly move to crounch pos to avoid fall of robot
-        self.move_to_pos(self.config.crounch_angles, total_time = 2, ask= False)
+        print(f"EMERGENCY PRESSED")
+        self.move_to_pos(self.config.crounch_angles, total_time = 1, ask= False)
         self.zero_torque_state(ask=False)
-        print(f"EMERGENCY")
+
+    def clipped_and_fault(self, motor_torque):
+
+        clipped  = np.clip(motor_torque, self.motor_targets_min_limit, self.motor_targets_max_limit)
+        fault = (clipped == self.motor_targets_max_limit)|(clipped == self.motor_targets_min_limit)
+        return clipped, fault
+        
 
 
-def controller_main(config, lowcmd_publisher):
+def controller_main(config):
 
-    controller = Controller(config, lowcmd_publisher)
+    controller = Controller(config)
 
     controller.zero_torque_state()
 
     # Move to the default position
     controller.move_to_pos(config.default_angles)
-
-
-    print(f"Press R1 to start RL-Controller, PRESS R2 for any emergenry")
-    while controller.get_remote_digital[KeyMap.R1] != 1:
-            time.sleep(controller.config.control_dt)
 
     print("====== The CONTROLLER is running at", (1/config.control_dt), "Hz... ======")
 
@@ -201,7 +240,7 @@ def controller_main(config, lowcmd_publisher):
         try:
             controller.run()
             # Press the select key to exit
-            if controller.get_remote_digital[KeyMap.R2] == 1:
+            if controller.get_remote_digital()[KeyMap.R2] == 1:
                 controller.emergency()
                 break
         except KeyboardInterrupt:

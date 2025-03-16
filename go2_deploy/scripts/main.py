@@ -21,7 +21,7 @@ if __name__ == "__main__":
    
     parser = argparse.ArgumentParser()
     parser.add_argument("net", type=str, help="network interface")
-    parser.add_argument("config", type=str, help="config file name in the configs folder", default="go2.yaml")
+    parser.add_argument("config", type=str, help="config file name in the configs folder")
     args = parser.parse_args()
 
     # Load config
@@ -36,8 +36,8 @@ if __name__ == "__main__":
     mp.set_start_method("spawn", force=True)
  
     sensor_process = mp.Process(target=sense_main, args=(config,), daemon=True)
-    #est_process = mp.Process(target=est_main, daemon=True)
-    #controller_process = mp.Process(target=controller_main, args=(config, lowcmd_publisher), daemon= True)
+    est_process = mp.Process(target=est_main, daemon=True)
+    controller_process = mp.Process(target=controller_main, args=(config,), daemon= True)
 
 
     # Clear the terminal
@@ -47,18 +47,20 @@ if __name__ == "__main__":
     #----------------------------------Sensor Read ---------------------------------- 
     sensor_process.start()
     time.sleep(5)
-
+  
     #----------------------------------Run Estimator -------------------------------
-    #est_process.start()
-    time.sleep(2)
+    est_process.start()
+    time.sleep(5)
+
     #---------------------------------Main COntroller----------------------------
-    #controller_process.start()
+    controller_process.start()
 
 
     #------------------------join the processes to this main thread-------------------
-    #controller_process.join()
+    
 
-    sensor_process.kill()
-    #est_process.kill()
+    sensor_process.join()
+    est_process.join()
+    controller_process.join()
 
     print("Exit")

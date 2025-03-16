@@ -5,6 +5,7 @@ import go2_deploy.utils.Go2_kinematics_CF as KIN
 import go2_deploy.utils.Go2_orientation_CF as ORI
 from termcolor import colored
 import go2_deploy.utils.math_function as MF
+import time
 
 
 #the estimator will only estimate foot positions from joint positions
@@ -41,11 +42,11 @@ def est_main():
     # Start Estimation
     print("====== The State Estimation Thread is running at", loop_freq, "Hz... ======")
 
-    t0 = state.get_time()['time_stamp']
+    t0 = time.time()
     thread_run = False
 
     while True:
-        loop_start_time = state.get_time()['time_stamp']
+        loop_start_time = time.time()
         elapsed_time    = loop_start_time - t0
 
         # get info from shared memory
@@ -68,19 +69,20 @@ def est_main():
 
         data = np.array([pfr, pfl, prr, prl])
         gravity = MF.get_gravity_orientation(quat)
+        #print(f"pfl: {pfl}")
 
-        state.set_foot(data, "foot_positions")
+        state.set_foot(data, "foot_position")
         state.set_foot(gravity, "gravity")
 
         # check time to ensure that the state estimator stays at a consistent running loop.
         loop_end_time = loop_start_time + loop_duration
-        present_time  = state.get_time()['time_stamp']
+        present_time  = time.time()
         if present_time > loop_end_time:
             delay_time = 1000 * (present_time - loop_end_time)
             if delay_time > 1.:
                 print(colored('Delayed ' + str(delay_time)[0:5] + ' ms at Te = ' + str(elapsed_time)[0:5] + ' s', 'yellow'))
         else:
-            while state.get_time()['time_stamp'] < loop_end_time:
+            while time.time() < loop_end_time:
                 pass
 
        
