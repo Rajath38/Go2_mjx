@@ -11,8 +11,17 @@ from unitree_sdk2py.utils.crc import CRC
 from go2_deploy.common.command_helper import create_zero_cmd, init_cmd_go, create_damping_cmd
 from go2_deploy.common.remote_controller import KeyMap
 from go2_deploy.config import Config
-from go2_deploy.utils.publisher import GO2STATE
-from unitree_sdk2py.core.channel import ChannelPublisher, ChannelFactoryInitialize
+from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber, ChannelFactoryInitialize
+from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowState_ as LowStateGo
+from unitree_sdk2py.idl.default import unitree_go_msg_dds__LowState_
+from unitree_sdk2py.go2.sport.sport_client import SportClient
+from go2_deploy.common.motion_switcher_client import MotionSwitcherClient
+from go2_deploy.common.remote_controller import RemoteController
+import go2_deploy.utils.Go2_kinematics_CF as KIN
+import go2_deploy.utils.math_function as MF
+from unitree_sdk2py.utils.thread import RecurrentThread
+
+from go2_deploy.utils.publisher import GO2STATE #only for diagnostics 
 
 import onnxruntime as rt
 import argparse
@@ -23,19 +32,29 @@ import argparse
 class Controller:
     def __init__(self, config: Config) -> None:
         self.config = config
+        self.loop_freq = 1000 # Hz
+        self.qj = np.zeros(12)
+        self.dqj = np.zeros(12)
    
         self.obs = np.zeros(config.num_obs, dtype=np.float32)
-        self.SM = GO2STATE()
 
         # go2 uses the go msg type
         self.low_cmd = unitree_go_msg_dds__LowCmd_()
         self.crc = CRC()
+
+        self.SM = GO2STATE()
+
+        self.remote_controller = RemoteController()
 
         ChannelFactoryInitialize(0, "enp2s0")
 
         #initialize a Publisher
         self.lowcmd_publisher_ = ChannelPublisher(config.lowcmd_topic, LowCmdGo)
         self.lowcmd_publisher_.Init()
+
+        self.lowstate_subscriber = ChannelSubscriber(config.lowstate_topic, LowStateGo)
+        self.lowstate_subscriber.Init(self.LowStateGoHandler, 2)  # Increase buffer size
+        
 
         self.action = np.zeros(self.config.num_actions)
         self.last_action = np.zeros(self.config.num_actions)
@@ -58,7 +77,54 @@ class Controller:
                                                 0.42,  1.24, -1.40,  0.25,  1.26, -1.40,  
                                                 0.35,  1.25, -1.40,  0.25,  1.22, -1.40
                                             ])
+        
+
+  
+        # go2 uses the go msg type
+        self.low_state = unitree_go_msg_dds__LowState_()
+
+        self.sc = SportClient()  
+        self.sc.SetTimeout(5.0)
+        self.sc.Init()
+
+        self.msc = MotionSwitcherClient()
+        self.msc.SetTimeout(5.0)
+        self.msc.Init()
+
+         # wait for the subscriber to receive data indicating that the go2 is connected successfully
+        self.wait_for_low_state()
+        self.action = np.zeros(self.config.num_actions)
+        self.last_action = np.zeros(self.config.num_actions)
+        self.last_last_action = np.zeros(self.config.num_actions)
+
+        status, result = self.msc.CheckMode()
+
+
+        while result['name']:
+            print(f"Trying to deactivate the motion control-related service..")
+            self.sc.StandDown()
+            code, _ = self.msc.ReleaseMode()
+            if (code == 0):
+                print("ReleaseMode succeeded.")
+            else:
+                print("ReleaseMode failed. Error code: ")
+            status, result = self.msc.CheckMode()
+            time.sleep(1)
+
         init_cmd_go(self.low_cmd)
+
+        self.start_obs()
+
+
+    def LowStateGoHandler(self, msg: LowStateGo):
+        self.low_state = msg
+        self.remote_controller.set(self.low_state.wireless_remote)
+        
+    def wait_for_low_state(self):
+        while self.low_state.tick == 0:
+            time.sleep(self.config.control_dt)
+        print("Successfully connected to the robot.")
+
 
     def send_cmd(self, cmd: Union[LowCmdGo, LowCmdHG]):
         cmd.crc = self.crc.Crc(cmd)
@@ -70,20 +136,14 @@ class Controller:
         if ask == True:
             print("For zero torque state.")
             print("Enter 'A'...to proceed")
-            while self.get_remote_digital()[KeyMap.A] != 1:
+            while self.remote_controller.button[KeyMap.A] != 1:
                 time.sleep(self.config.control_dt)
 
         print("Zero torque")
         create_zero_cmd(self.low_cmd)
-        self.send_cmd(self.low_cmd)
-
-    def get_remote_digital(self):
-        return self.SM.get_remote_data("Digital")
+        #self.send_cmd(self.low_cmd)
     
-    def get_remote_analog(self):
-        return self.SM.get_remote_data("Analog")
-    
-    def move_to_pos(self, default_pos, total_time = 0.5, ask = True):
+    def move_to_pos(self, default_pos, total_time = 5, ask = True):
         # move time 2s
         num_step = int(total_time / self.config.control_dt)
         
@@ -93,8 +153,7 @@ class Controller:
         
         dof_size = len(dof_idx)
 
-        leg_state = self.SM.get()
-        qj_obs = leg_state["joint_positions"]
+        qj_obs = self.qj
         
         # record the current pos
         init_dof_pos = np.copy(qj_obs)
@@ -102,7 +161,7 @@ class Controller:
         if ask == True:
             print("For Default Pose.")
             print("Enter 'B'...to proceed")
-            while self.get_remote_digital()[KeyMap.B] != 1:
+            while self.remote_controller.button[KeyMap.B] != 1:
                 time.sleep(self.config.control_dt)
             
         # move to default pos
@@ -121,7 +180,7 @@ class Controller:
                 self.low_cmd.motor_cmd[motor_idx].kp = kps[j]
                 self.low_cmd.motor_cmd[motor_idx].kd = kds[j]
                 self.low_cmd.motor_cmd[motor_idx].tau = 0
-                self.send_cmd(self.low_cmd)
+                #self.send_cmd(self.low_cmd)
                 time.sleep(self.config.control_dt)
         
         if ask == True:
@@ -131,7 +190,7 @@ class Controller:
     def hold_default_pos_state(self):
 
         print(f"Press R1 to start RL-Controller, PRESS R2 for any emergenry")
-        while self.get_remote_digital()[KeyMap.R1] != 1: 
+        while self.remote_controller.button[KeyMap.R1] != 1: 
             for i in range(len(self.config.leg_joint2motor_idx)):
                 motor_idx = self.config.leg_joint2motor_idx[i]
                 self.low_cmd.motor_cmd[motor_idx].q = self.config.default_angles[i]
@@ -139,8 +198,51 @@ class Controller:
                 self.low_cmd.motor_cmd[motor_idx].kp = self.config.kps[i]
                 self.low_cmd.motor_cmd[motor_idx].kd = self.config.kds[i]
                 self.low_cmd.motor_cmd[motor_idx].tau = 0
-            self.send_cmd(self.low_cmd)
+            #self.send_cmd(self.low_cmd)
             time.sleep(self.config.control_dt)
+
+
+    def obs_thread(self):
+        # compute leg forward kinematics
+        pfr, _, _, pfl, _, _, prr, _, _, prl, _, _ = KIN.legFK( self.low_state.motor_state[0].q,  self.low_state.motor_state[1].q,   self.low_state.motor_state[2].q,  0,
+                                                                                self.low_state.motor_state[3].q,  self.low_state.motor_state[4].q,   self.low_state.motor_state[5].q,  0,
+                                                                                self.low_state.motor_state[6].q,  self.low_state.motor_state[7].q,   self.low_state.motor_state[8].q,  0,
+                                                                                self.low_state.motor_state[9].q,  self.low_state.motor_state[10].q,  self.low_state.motor_state[11].q, 0,
+                                                                                self.low_state.motor_state[0].dq, self.low_state.motor_state[1].dq,  self.low_state.motor_state[2].dq, 
+                                                                                self.low_state.motor_state[3].dq, self.low_state.motor_state[4].dq,  self.low_state.motor_state[5].dq, 
+                                                                                self.low_state.motor_state[6].dq, self.low_state.motor_state[7].dq,  self.low_state.motor_state[8].dq, 
+                                                                                self.low_state.motor_state[9].dq, self.low_state.motor_state[10].dq, self.low_state.motor_state[11].dq)
+        self.foot_positions = np.array([pfr, pfl, prr, prl])
+        self.ang_vel = np.array([self.low_state.imu_state.gyroscope], dtype=np.float32)
+        quat = np.array(self.low_state.imu_state.quaternion)
+        quat_ = quat[[1,2,3,0]] #from w, x, y, z to  x, y, z, w 
+        imu_xmat = MF.quat2rotm(quat_)
+        self.gravity_orientation = imu_xmat.T @ np.array([0, 0, -1])
+
+        # Get the current joint position and velocity
+        for i in self.config.leg_joint2motor_idx:
+            self.qj[i] = self.low_state.motor_state[i].q
+            self.dqj[i] = self.low_state.motor_state[i].dq
+
+        self.cmd_arr = np.array([self.remote_controller.ry, self.remote_controller.rx, self.remote_controller.lx])  # Selecting elements in the order: ry -> X, rx -> Y, lx -> YAW
+
+        self.SM.set_data(self.qj, "joint_positions")
+        self.SM.set_data(self.dqj, "joint_velocities")
+        self.SM.set_data(quat, "imu_ori")
+        self.SM.set_data(self.ang_vel, "imu_omega")
+
+        self.SM.set_foot(self.foot_positions, "foot_position")
+        self.SM.set_foot(self.gravity_orientation, "gravity")
+
+    
+    
+    
+    def start_obs(self):
+        print(f"====== The Sense Thread is running at {self.loop_freq} Hz... ======")
+        self.lowCmdWriteThreadPtr = RecurrentThread(
+            interval=1/self.loop_freq, target=self.obs_thread, name="writebasiccmd"
+        )
+        self.lowCmdWriteThreadPtr.Start()
 
 
     def run(self):
@@ -152,34 +254,17 @@ class Controller:
         noisy_joint_vel,  # 12
         info["last_act"],  # 12
         info["command"],  # 3"""
+        num_actions = self.config.num_actions
 
-        if self.get_remote_digital()[KeyMap.R2] == 1:
+        if self.remote_controller.button[KeyMap.R2] == 1:
             self.emergency()
             return True
 
-        # create observation
-        gravity_orientation = self.SM.get_foot('gravity')
-        foot_positions = self.SM.get_foot('foot_position')
-        leg_state = self.SM.get()
-
-        qj_obs = leg_state["joint_positions"]
-        dqj_obs = leg_state["joint_velocities"]
-        ang_vel = leg_state["imu_omega"]
-
-        qj_obs = (qj_obs - self.config.default_angles) * self.config.dof_pos_scale  #joint offsets
-        dqj_obs = dqj_obs * self.config.dof_vel_scale 
-
-        ang_vel = ang_vel * self.config.ang_vel_scale
-        num_actions = self.config.num_actions
-
-        cmd = self.get_remote_analog() #self.lx, self.rx, self.ry, self.ly
-        self.cmd_arr = cmd[[2, 1, 0]]*np.array([1, -1, -1])  # Selecting elements in the order: ry -> X, rx -> Y, lx -> YAW
-        
-        self.obs[:12] = foot_positions 
-        self.obs[12:15] = ang_vel
-        self.obs[15:18] = gravity_orientation
-        self.obs[18 : 18 + num_actions] = qj_obs
-        self.obs[18 + num_actions : 18 + num_actions*2] = dqj_obs
+        self.obs[:12] = self.foot_positions 
+        self.obs[12:15] = self.ang_vel
+        self.obs[15:18] = self.gravity_orientation
+        self.obs[18 : 18 + num_actions] = self.qj
+        self.obs[18 + num_actions : 18 + num_actions*2] = self.dqj
         self.obs[18 + num_actions*2 : 18 + num_actions*3] = self._last_action
         self.obs[18 + num_actions*3: 18 + num_actions*3 + 3] = self.cmd_arr 
 
@@ -203,7 +288,7 @@ class Controller:
             self.low_cmd.motor_cmd[motor_idx].tau = 0
 
         # send the command
-        self.send_cmd(self.low_cmd)
+        #self.send_cmd(self.low_cmd)
         print(f"target_position:{clipped_array}") 
         print(f"fault: {fault}")
 
@@ -221,7 +306,7 @@ class Controller:
         print(f"EMERGENCY PRESSED")
         #self.move_to_pos(self.config.crounch_angles, total_time = 0.5, ask= False)
         create_damping_cmd(self.low_cmd)
-        self.send_cmd(self.low_cmd)
+        #self.send_cmd(self.low_cmd)
         #self.zero_torque_state(ask=False)
 
     def clipped_and_fault(self, motor_torque):
@@ -232,7 +317,17 @@ class Controller:
         
 
 
-def controller_main(config):
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("net", type=str, help="network interface")
+    parser.add_argument("config", type=str, help="config file name in the configs folder")
+    args = parser.parse_args()
+
+    # Load config
+    config_path = f"{LEGGED_GYM_ROOT_DIR}/go2_deploy/configs/{args.config}"
+   
+    config = Config(config_path)
 
     controller = Controller(config)
 

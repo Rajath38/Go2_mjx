@@ -135,7 +135,7 @@ def Rx(t):
 
 
 @jit(nopython=True)
-def quat2rotm(Q):
+def quat2rotm(Q): # in the order [x,y,z,w]
     """
     convert quaternion to rotation matrix
     """

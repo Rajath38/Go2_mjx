@@ -111,7 +111,7 @@
       <geom mesh="base_2" material="metal" class="visual" />
       <geom mesh="base_3" material="metal" class="visual" />
       <geom mesh="base_4" material="metal" class="visual" />
-      <site name="imu" pos="-0.02557 0 0.04232" group="5"/>
+      <site name="imu" pos="-0.02557 0 0.04232"/>
       <body name="FL_hip" pos="0.1934 0.0465 0">
         <inertial pos="-0.0054 0.00194 -0.000105" quat="0.497014 0.499245 0.505462 0.498237"
           mass="0.678"

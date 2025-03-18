@@ -68,7 +68,10 @@ def est_main():
                                                                               dq[9], dq[10], dq[11] )
 
         data = np.array([pfr, pfl, prr, prl])
-        gravity = MF.get_gravity_orientation(quat)
+        quat_ = quat[[1,2,3,0]] #from w, x, y, z to  x, y, z, w 
+        imu_xmat = MF.quat2rotm(quat_)
+        gravity = imu_xmat.T @ np.array([0, 0, -1])
+        #gravity = MF.get_gravity_orientation(quat)
         #print(f"pfl: {pfl}")
 
         state.set_foot(data, "foot_position")

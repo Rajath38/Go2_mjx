@@ -50,7 +50,8 @@ class OnnxController:
         policy_path, providers=["CPUExecutionProvider"]
     )
 
-    self.JOYSTICK = True
+    self.JOYSTICK = False
+    self.SIM_REAL = False
 
     self._action_scale = action_scale
     self._default_angles = default_angles
@@ -121,21 +122,57 @@ class OnnxController:
       self.cmd_arr = cmd[[3, 0, 1]]*np.array([1, -1, -1])  #Selecting elements in the order: ly -> X, lx -> Y, rx -> YAW
     else:
       self.cmd_arr = self.PJ.get()['XYyaw']
-    
 
-    obs = np.hstack([
-        #linvel, #3
-        feet_pos, #12
-        gyro, #3
-        gravity, #3
-        del_joint_angles, #12
-        joint_velocities, #12
-        #self.qpos_error_history, #36
-        self._last_action, #12
-        #self._last_last_action,
-        self.cmd_arr#self.PJ.get()['XYyaw'], #3
-    ])
-    #print(f"obs:{obs}")
+    gravity_orientation = self.SM.get_foot('gravity')
+    foot_positions = self.SM.get_foot('foot_position')
+    leg_state = self.SM.get()
+
+    qj_obs = leg_state["joint_positions"]
+    dqj_obs = leg_state["joint_velocities"]
+    ang_vel = leg_state["imu_omega"]
+
+    if self.SIM_REAL == True:
+      obs = np.hstack([
+          #linvel, #3
+          foot_positions, #12
+          ang_vel, #3
+          gravity_orientation, #3
+          qj_obs - self._default_angles, #12
+          dqj_obs, #12
+          #self.qpos_error_history, #36
+          self._last_action, #12
+          #self._last_last_action,
+          self.cmd_arr#self.PJ.get()['XYyaw'], #3
+      ])
+    
+    else:
+      obs = np.hstack([
+          #linvel, #3
+          feet_pos, #12
+          gyro, #3
+          gravity, #3
+          del_joint_angles, #12
+          joint_velocities, #12
+          #self.qpos_error_history, #36
+          self._last_action, #12
+          #self._last_last_action,
+          self.cmd_arr#self.PJ.get()['XYyaw'], #3
+      ])
+    """print(f"simulated_pos:{self._default_angles}")
+    print(f"actual_pos:{qj_obs}")  # is correct
+    print(f"error :{qj_obs-self._default_angles}")"""
+
+    #print(f"sim_vel = {joint_velocities}")
+    #print(f"act_vel = {dqj_obs*0.05}") # not sure
+ 
+    #print(f"sim_feet_pos:{feet_pos}")
+    #print(f"act_feet_pos:{foot_positions}") # is is correct
+    #print(f"sim_g:{gravity}")
+    #print(f"act_g:{gravity_orientation}")
+
+    print(f"omega_sim:{gyro}")
+    print(f"omega_act:{ang_vel*0.1}")
+
     return obs.astype(np.float32)
 
   def get_control(self, model: mujoco.MjModel, data: mujoco.MjData) -> None:
@@ -166,14 +203,14 @@ class OnnxController:
     clipped_array, fault = self.clipped_and_fault(self.motor_targets)
     data.ctrl[:] = clipped_array
 
-    if self._counter % 10 == 0:  # Print every 100 steps
-        os.system("clear")  # Clears the terminal (Use "cls" for Windows)
+    #if self._counter % 10 == 0:  # Print every 100 steps
+        #os.system("clear")  # Clears the terminal (Use "cls" for Windows)
         #print(f"Step {self._counter}:")
-        print(f"motor_targets_min: {np.round(self.motor_targets_min_limit,3)}")
-        print(f"motor_targets_max: {np.round(self.motor_targets_max_limit,3)}")
-        print(f"motor_target: {self.motor_targets}")
-        print(f"clipped_array: {np.round(clipped_array,3)}")
-        print(fault)
+        #print(f"motor_targets_min: {np.round(self.motor_targets_min_limit,3)}")
+        #print(f"motor_targets_max: {np.round(self.motor_targets_max_limit,3)}")
+        #print(f"motor_target: {self.motor_targets}")
+        #print(f"clipped_array: {np.round(clipped_array,3)}")
+        #print(fault)
       #print(f"ctrl {data.ctrl[:]}")
 
 def load_callback(model=None, data=None):
