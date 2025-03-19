@@ -20,6 +20,7 @@ from go2_deploy.common.remote_controller import RemoteController
 import go2_deploy.utils.Go2_kinematics_CF as KIN
 import go2_deploy.utils.math_function as MF
 from unitree_sdk2py.utils.thread import RecurrentThread
+import sys
 
 from go2_deploy.utils.publisher import GO2STATE #only for diagnostics 
 
@@ -32,8 +33,13 @@ import argparse
 class Controller:
     def __init__(self, config: Config) -> None:
         self.config = config
-        self.loop_freq = 1000 # Hz
-        self.qj = np.zeros(12)
+        self.loop_freq = 2500 #frequency of obs loop in Hz, anything less than this , is lesser than the actual subscription callback, ehich results in non Real time update of states 
+        #self.qj = config.default_angles #np.zeros(12) is not recommended as it causes problems 
+        #Important about numpy is above assignment
+        #since we are initializing this self.qj = config.default_angles, they are just the same array addressed by different names
+        # so later in the obs_thread, as we are changing self.qj, we cal also observe that config.default_angles also change
+        # crrating lot of issues, so we have to make a conpy assignment here.
+        self.qj = np.copy(config.default_angles) 
         self.dqj = np.zeros(12)
    
         self.obs = np.zeros(config.num_obs, dtype=np.float32)
@@ -53,7 +59,7 @@ class Controller:
         self.lowcmd_publisher_.Init()
 
         self.lowstate_subscriber = ChannelSubscriber(config.lowstate_topic, LowStateGo)
-        self.lowstate_subscriber.Init(self.LowStateGoHandler, 2)  # Increase buffer size
+        self.lowstate_subscriber.Init(self.LowStateGoHandler, 10)  # Increase buffer size
         
 
         self.action = np.zeros(self.config.num_actions)
@@ -114,6 +120,8 @@ class Controller:
         init_cmd_go(self.low_cmd)
 
         self.start_obs()
+        #wait for 5 sec for the obs thread to initialize
+        time.sleep(10)
 
 
     def LowStateGoHandler(self, msg: LowStateGo):
@@ -141,10 +149,11 @@ class Controller:
 
         print("Zero torque")
         create_zero_cmd(self.low_cmd)
-        #self.send_cmd(self.low_cmd)
+        self.send_cmd(self.low_cmd)
     
-    def move_to_pos(self, default_pos, total_time = 5, ask = True):
+    def move_to_pos(self, default_pos, total_time = 2, ask = True):
         # move time 2s
+        error_status = False
         num_step = int(total_time / self.config.control_dt)
         
         dof_idx = self.config.leg_joint2motor_idx
@@ -153,44 +162,62 @@ class Controller:
         
         dof_size = len(dof_idx)
 
-        qj_obs = self.qj
-        
-        # record the current pos
-        init_dof_pos = np.copy(qj_obs)
-
         if ask == True:
             print("For Default Pose.")
             print("Enter 'B'...to proceed")
             while self.remote_controller.button[KeyMap.B] != 1:
                 time.sleep(self.config.control_dt)
+                print(f"dof_pos: {self.qj[2]}")
+                print(f"low_state.motor_state[2].q: {self.low_state.motor_state[2].q}")
+
+        # record the current pos, here anagin since self.qj is updated by obs thread instantaniousle
+        # we need to take a copy of this as init_dof_pos and then move to the default pose.
+        init_dof_pos = np.copy(self.qj)
+        print(f"Initial: {init_dof_pos}")
+        print(f"Final: {default_pos}")
             
         # move to default pos
         print(f"Moving to requested robot pose")
 
         # move to default pos
         for i in range(num_step):
+            if self.remote_controller.button[KeyMap.R2] == 1:
+                print(f"EMERGENCY PRESSED")
+                self.emergency()
+                return True
+        
             print(f"Moving step {i}")
             alpha = i / num_step
+
             for j in range(dof_size): #comment to only move calf_FL
-                #j = 2
                 motor_idx = dof_idx[j]
                 target_pos = default_pos[j]
-                self.low_cmd.motor_cmd[motor_idx].q = init_dof_pos[j] * (1 - alpha) + target_pos * alpha
+                inst_pos = init_dof_pos[j] * (1 - alpha) + target_pos * alpha
+                print(f"Inst_pos:{inst_pos}, alpha:{alpha}")
+                self.low_cmd.motor_cmd[motor_idx].q = inst_pos
                 self.low_cmd.motor_cmd[motor_idx].qd = 0
                 self.low_cmd.motor_cmd[motor_idx].kp = kps[j]
                 self.low_cmd.motor_cmd[motor_idx].kd = kds[j]
                 self.low_cmd.motor_cmd[motor_idx].tau = 0
-                #self.send_cmd(self.low_cmd)
-                time.sleep(self.config.control_dt)
+
+            self.send_cmd(self.low_cmd)
+            time.sleep(self.config.control_dt)
         
         if ask == True:
-            self.hold_default_pos_state()
+            error_status = self.hold_default_pos_state()
+
+        return error_status
 
 
     def hold_default_pos_state(self):
 
         print(f"Press R1 to start RL-Controller, PRESS R2 for any emergenry")
         while self.remote_controller.button[KeyMap.R1] != 1: 
+            if self.remote_controller.button[KeyMap.R2] == 1:
+                print(f"EMERGENCY PRESSED")
+                self.emergency()
+                return True
+            
             for i in range(len(self.config.leg_joint2motor_idx)):
                 motor_idx = self.config.leg_joint2motor_idx[i]
                 self.low_cmd.motor_cmd[motor_idx].q = self.config.default_angles[i]
@@ -198,8 +225,12 @@ class Controller:
                 self.low_cmd.motor_cmd[motor_idx].kp = self.config.kps[i]
                 self.low_cmd.motor_cmd[motor_idx].kd = self.config.kds[i]
                 self.low_cmd.motor_cmd[motor_idx].tau = 0
-            #self.send_cmd(self.low_cmd)
+
+            self.send_cmd(self.low_cmd)
             time.sleep(self.config.control_dt)
+
+        return False
+            
 
 
     def obs_thread(self):
@@ -212,7 +243,8 @@ class Controller:
                                                                                 self.low_state.motor_state[3].dq, self.low_state.motor_state[4].dq,  self.low_state.motor_state[5].dq, 
                                                                                 self.low_state.motor_state[6].dq, self.low_state.motor_state[7].dq,  self.low_state.motor_state[8].dq, 
                                                                                 self.low_state.motor_state[9].dq, self.low_state.motor_state[10].dq, self.low_state.motor_state[11].dq)
-        self.foot_positions = np.array([pfr, pfl, prr, prl])
+        self.foot_pos = np.array([pfr, pfl, prr, prl])
+        self.foot_positions = np.ravel(self.foot_pos)
         self.ang_vel = np.array([self.low_state.imu_state.gyroscope], dtype=np.float32)
         quat = np.array(self.low_state.imu_state.quaternion)
         quat_ = quat[[1,2,3,0]] #from w, x, y, z to  x, y, z, w 
@@ -257,14 +289,16 @@ class Controller:
         num_actions = self.config.num_actions
 
         if self.remote_controller.button[KeyMap.R2] == 1:
+            print(f"EMERGENCY PRESSED")
             self.emergency()
             return True
+        qj_offsets = (self.qj - self.config.default_angles) * self.config.dof_pos_scale  #joint offsets
 
         self.obs[:12] = self.foot_positions 
-        self.obs[12:15] = self.ang_vel
+        self.obs[12:15] = self.ang_vel*self.config.ang_vel_scale
         self.obs[15:18] = self.gravity_orientation
-        self.obs[18 : 18 + num_actions] = self.qj
-        self.obs[18 + num_actions : 18 + num_actions*2] = self.dqj
+        self.obs[18 : 18 + num_actions] = qj_offsets
+        self.obs[18 + num_actions : 18 + num_actions*2] = self.dqj*self.config.dof_vel_scale
         self.obs[18 + num_actions*2 : 18 + num_actions*3] = self._last_action
         self.obs[18 + num_actions*3: 18 + num_actions*3 + 3] = self.cmd_arr 
 
@@ -288,9 +322,13 @@ class Controller:
             self.low_cmd.motor_cmd[motor_idx].tau = 0
 
         # send the command
-        #self.send_cmd(self.low_cmd)
+        self.send_cmd(self.low_cmd)
         print(f"target_position:{clipped_array}") 
         print(f"fault: {fault}")
+
+        """if np.any(fault) == True:
+            print(f"Exit due to dof limit exceed")
+            return True"""
 
         time.sleep(self.config.control_dt)
         
@@ -303,10 +341,9 @@ class Controller:
         #self.send_cmd(controller.low_cmd)
         # not sure if damping is better than moving to corunch position, we can check by running experiments.... still pending, hardware not available ....
           #rapidly move to crounch pos to avoid fall of robot
-        print(f"EMERGENCY PRESSED")
         #self.move_to_pos(self.config.crounch_angles, total_time = 0.5, ask= False)
         create_damping_cmd(self.low_cmd)
-        #self.send_cmd(self.low_cmd)
+        self.send_cmd(self.low_cmd)
         #self.zero_torque_state(ask=False)
 
     def clipped_and_fault(self, motor_torque):
@@ -333,8 +370,15 @@ if __name__ == "__main__":
 
     controller.zero_torque_state()
 
+    print(f"default angles: {config.default_angles}")
+
     # Move to the default position
-    controller.move_to_pos(config.default_angles)
+    fault = controller.move_to_pos(config.default_angles)
+
+    if fault:
+        print(f"Fault in startup")
+        sys.exit(1)
+
 
     print("====== The CONTROLLER is running at", (1/config.control_dt), "Hz... ======")
 

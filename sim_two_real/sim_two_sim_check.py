@@ -158,20 +158,20 @@ class OnnxController:
           #self._last_last_action,
           self.cmd_arr#self.PJ.get()['XYyaw'], #3
       ])
-    """print(f"simulated_pos:{self._default_angles}")
-    print(f"actual_pos:{qj_obs}")  # is correct
-    print(f"error :{qj_obs-self._default_angles}")"""
+    #print(f"simulated_pos:{self._default_angles}")
+    #print(f"actual_pos:{qj_obs}")  # is correct
+    #print(f"error :{qj_obs-self._default_angles}")
 
     #print(f"sim_vel = {joint_velocities}")
-    #print(f"act_vel = {dqj_obs*0.05}") # not sure
+    #print(f"act_vel = {dqj_obs}") # not sure
  
-    #print(f"sim_feet_pos:{feet_pos}")
-    #print(f"act_feet_pos:{foot_positions}") # is is correct
+    print(f"sim_feet_pos:{feet_pos}")
+    print(f"act_feet_pos:{foot_positions}") # is is correct
     #print(f"sim_g:{gravity}")
     #print(f"act_g:{gravity_orientation}")
 
-    print(f"omega_sim:{gyro}")
-    print(f"omega_act:{ang_vel*0.1}")
+    #print(f"omega_sim:{gyro}")
+    #print(f"omega_act:{ang_vel*0.25}")
 
     return obs.astype(np.float32)
 
