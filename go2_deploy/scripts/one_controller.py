@@ -52,7 +52,7 @@ class Controller:
 
         self.remote_controller = RemoteController()
 
-        ChannelFactoryInitialize(0, "enp2s0")
+        ChannelFactoryInitialize(0, "enp2s0")  #"eth1" for running directly on the onboard jetson
 
         #initialize a Publisher
         self.lowcmd_publisher_ = ChannelPublisher(config.lowcmd_topic, LowCmdGo)
