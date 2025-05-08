@@ -5,7 +5,7 @@
 This project showcases a **fast-forward version** of the **Reinforcement Learning (RL) controller/policy** deployed on a **Unitree Go2** quadruped robot.
 
 Watch the demo on YouTube:
-[![RL Controller Demo - Unitree Go2](https://img.youtube.com/vi/YOUTUBE_VIDEO_ID/0.jpg)](https://www.youtube.com/watch?v=8bq4slHcozQ)
+[![RL Controller Demo - Unitree Go2](https://github.com/Rajath38/Go2_mjx/blob/main/Screenshot%20from%202025-05-08%2014-14-44.png)](https://www.youtube.com/watch?v=8bq4slHcozQ)
 
 ## 📝 Project Overview
 
